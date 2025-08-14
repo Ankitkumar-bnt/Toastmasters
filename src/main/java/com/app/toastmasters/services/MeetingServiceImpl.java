@@ -39,7 +39,7 @@ public class MeetingServiceImpl implements MeetingService {
         this.mapper = mapper;
     }
 
-    public void setupInitialAvailableMembersForMeeting(Meeting meeting) {
+    private void setupInitialAvailableMembersForMeeting(Meeting meeting) {
         List<User> allUsers = userRepo.findAll();
         List<AvailableMembers> availableList = new ArrayList<>();
 
@@ -47,8 +47,8 @@ public class MeetingServiceImpl implements MeetingService {
             AvailableMembers availableMember = new AvailableMembers();
             availableMember.setUser(user);
             availableMember.setMeeting(meeting);
-            availableMember.setDate(LocalDate.now()); // or meeting.getDate()
-            availableMember.setStatus(-1); // unseen
+            availableMember.setDate(meeting.getMeetingDate());
+            availableMember.setStatus(-1);
             availableList.add(availableMember);
         }
         availableMembersRepository.saveAll(availableList);
@@ -67,7 +67,8 @@ public class MeetingServiceImpl implements MeetingService {
 
     @Override
     public ResponseEntity<ResponseMessage<List<MeetingResponseDTO>>> getAllMeetings() {
-        List<Meeting> meetings = meetingRepo.findAll();
+        List<Meeting> meetings = meetingRepo.findByDeleteStatus(Constant.DELETE_STATUS_ACTIVE);
+
         if (meetings.isEmpty()) {
             throw new MeetingNotFoundException(Constant.MEETING_NOT_FOUND);
         }
@@ -77,7 +78,7 @@ public class MeetingServiceImpl implements MeetingService {
                 .collect(Collectors.toList());
 
         ResponseMessage<List<MeetingResponseDTO>> responseMessage =
-                new ResponseMessage<>(HttpStatus.OK, Constant.FOUND_ALL_MEETINGS, dtoList);
+                new ResponseMessage<List<MeetingResponseDTO>>(HttpStatus.OK, Constant.FOUND_ALL_MEETINGS, dtoList);
 
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
@@ -100,6 +101,15 @@ public class MeetingServiceImpl implements MeetingService {
         if (meetingById.isEmpty()) {
             throw new MeetingNotFoundException(Constant.MEETING_NOT_FOUND);
         }
+        Meeting meeting = getMeeting(meetingRequestDTO, meetingById);
+
+        Meeting updatedMeeting = meetingRepo.save(meeting);
+        ResponseMessage<MeetingResponseDTO> responseMessage =
+                new ResponseMessage<>(HttpStatus.OK, Constant.MEETING_UPDATE_SUCCESS, mapper.toDTO(updatedMeeting));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
+    private static Meeting getMeeting(MeetingRequestDTO meetingRequestDTO, Optional<Meeting> meetingById) {
         Meeting meeting = meetingById.get();
 
         if (meetingRequestDTO.getMeetingDate() != null)
@@ -112,28 +122,25 @@ public class MeetingServiceImpl implements MeetingService {
             meeting.setMeetingTheme(meetingRequestDTO.getMeetingTheme());
         if (meetingRequestDTO.getMeetingLocation() != null)
             meeting.setMeetingLocation(meetingRequestDTO.getMeetingLocation());
-
-        Meeting updatedMeeting = meetingRepo.save(meeting);
-        ResponseMessage<MeetingResponseDTO> responseMessage =
-                new ResponseMessage<>(HttpStatus.OK, Constant.MEETING_UPDATE_SUCCESS, mapper.toDTO(updatedMeeting));
-        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+        return meeting;
     }
 
     @Override
     public ResponseEntity<ResponseMessage<MeetingResponseDTO>> deleteMeeting(Integer meetingId) {
         Optional<Meeting> meetingById = meetingRepo.findById(meetingId);
+
         if (meetingById.isEmpty()) {
             throw new MeetingNotFoundException(Constant.MEETING_NOT_FOUND);
         }
-
-        meetingRepo.deleteById(meetingId);
-
-        if (meetingRepo.findById(meetingId).isPresent()) {
-            throw new MeetingNotFoundException(Constant.MEETING_DELETE_FAILS);
-        }
+        Meeting meeting = meetingById.get();
+        meeting.setDeleteStatus(0);
+        meetingRepo.save(meeting);
 
         ResponseMessage<MeetingResponseDTO> responseMessage =
-                new ResponseMessage<>(HttpStatus.OK, Constant.MEETING_DELETE_SUCCESS, mapper.toDTO(meetingById.get()));
+                new ResponseMessage<>(HttpStatus.OK,
+                        Constant.MEETING_DELETE_SUCCESS,
+                        mapper.toDTO(meeting) );
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
+
 }

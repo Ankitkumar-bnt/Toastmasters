@@ -14,4 +14,5 @@ public class MeetingRequestDTO {
     private LocalTime endTime;
     private String meetingTheme;
     private String meetingLocation;
+    private int deleteStatus;
 }

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 
 import com.app.toastmasters.entity.User;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -20,4 +21,6 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     @Transactional
     @Query("update User u set u.deleteStatus = 0 where u.userId = :id")
     int deleteMemberById(@Param("id") Integer userId);
+
+    List<User> findByDeleteStatus(int deleteStatus);
 }

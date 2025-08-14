@@ -44,7 +44,7 @@ public class RoleServiceImpl implements RoleService {
         }
 
         ResponseMessage<List<RoleResponseDTO>> responseMessage =
-                new ResponseMessage<>(HttpStatus.OK, Constant.FOUND_ALL_ROLES,
+                new ResponseMessage<List<RoleResponseDTO>>(HttpStatus.OK, Constant.FOUND_ALL_ROLES,
                         allRoles.stream()
                                 .map(mapper::toResponseDto)
                                 .collect(Collectors.toList()));

@@ -1,5 +1,10 @@
 package com.app.toastmasters.dto.requestDTO;
 
+import lombok.Getter;
+import lombok.Setter;
+
+@Setter
+@Getter
 public class PreferredRoleRequestDTO {
 
     private int userId;

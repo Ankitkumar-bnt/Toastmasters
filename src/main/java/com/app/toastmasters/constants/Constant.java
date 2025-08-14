@@ -21,6 +21,11 @@ public class Constant {
 	public static final String ROLE_DELETE_SUCCESS = "Role deleted successfully";
 	public static final String ROLE_NOT_FOUND = "Role not found";
 	public static final String ROLE_DELETE_FAILS = "Role delete failed";
+	public static final String ROLE_ASSIGNED_BY_MEMBER = "Role assigned added successfully by member";
+	public static final String INVALID_USERID_AND_MEETINGID = "UserId and MeetingId not matched";
+	public static final String PREFERRED_ROLE_ISEMPLTY = "Preferred role list is empty";
+	public static final String DELETE_PREFERRED_ROLELIST_ISEMPLTY = "Delete preferred role list is empty";
+	public static final String PREFERRED_ROLE_DELETED = "Deleted preferred role";
 
 	// Meeting Constants
 	public static final String MEETING_ADDED_SUCCESS = "Meeting added successfully";
@@ -30,6 +35,11 @@ public class Constant {
 	public static final String MEETING_DELETE_SUCCESS = "Meeting deleted successfully";
 	public static final String MEETING_NOT_FOUND = "Meeting not found";
 	public static final String MEETING_DELETE_FAILS = "Meeting deletion failed";
+
+	// Constant Words
+	public static final Integer DELETE_STATUS_ACTIVE = 1;
+	public static final Integer DELETE_STATUS_DELETED = 0;
+
 
 
 
