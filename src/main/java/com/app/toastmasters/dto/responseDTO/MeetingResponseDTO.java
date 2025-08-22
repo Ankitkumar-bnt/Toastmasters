@@ -15,5 +15,6 @@ public class MeetingResponseDTO {
     private LocalTime endTime;
     private String meetingTheme;
     private String meetingLocation;
+    private String category;
     private int deleteStatus;
 }

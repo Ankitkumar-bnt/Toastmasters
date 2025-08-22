@@ -36,5 +36,7 @@ public class Meeting {
     @Column(nullable = false)
     private String meetingLocation;
 
+    private String category;
+
     private int deleteStatus = 1;
 }

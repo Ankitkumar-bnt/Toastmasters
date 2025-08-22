@@ -36,6 +36,9 @@ public class Constant {
 	public static final String MEETING_NOT_FOUND = "Meeting not found";
 	public static final String MEETING_DELETE_FAILS = "Meeting deletion failed";
 
+	// Member Availability
+	public static final String AVAILABILITY_MARKED_SUCCESS = "Availability marked successfully";
+
 	// Constant Words
 	public static final Integer DELETE_STATUS_ACTIVE = 1;
 	public static final Integer DELETE_STATUS_DELETED = 0;

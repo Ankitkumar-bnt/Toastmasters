@@ -14,6 +14,8 @@ public interface AvailableMemberMapper {
 
     AvailableMembers toEntity(AvailableMembersRequestDTO dto);
 
+    @Mapping(source = "user.userId", target = "userId")
+    @Mapping(source = "meeting.meetingId", target = "meetingId")
     AvailableMemberResponseDTO toDTO(AvailableMembers entity);
 }
 

@@ -39,7 +39,21 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<List<UserResponseDTO>>> getAllMember() {
+    public ResponseEntity<ResponseMessage<List<UserResponseDTO>>> getAllMember(){
+        List<User> allMembers = userRepo.findAll();
+
+        if(allMembers.isEmpty()) {
+            throw new MemberNotFoundException(Constant.MEMBER_NOT_FOUND);
+        }
+        ResponseMessage<List<UserResponseDTO>> responseMessage =
+                new ResponseMessage<List<UserResponseDTO>>(HttpStatus.OK, Constant.FOUND_ALL_MEMBERS,
+                        allMembers.stream()
+                                .map(mapper::toResponseDTO)
+                                .collect(Collectors.toList()));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
+    public ResponseEntity<ResponseMessage<List<UserResponseDTO>>> getAllMembers() {
         List<User> allMembers = userRepo.findByDeleteStatus(Constant.DELETE_STATUS_ACTIVE);
 
         if(allMembers.isEmpty()) {
