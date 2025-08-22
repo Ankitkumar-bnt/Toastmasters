@@ -1,0 +1,19 @@
+import axios from "axios";
+
+const API_URL = "http://localhost:8888/user";
+
+export const getAllMembers = async () => {
+  return await axios.get(`${API_URL}/getAllMembers`);
+};
+
+export const addMember = async (user) => {
+  return await axios.post(`${API_URL}/addMember`, user);
+};
+
+export const updateMember = async (updatedData) => {
+  return await axios.patch(`${API_URL}/updateMember/${updatedData.userId}`, updatedData);
+};
+
+export const deleteUserById = async (userId) => {
+  return await axios.delete(`${API_URL}/deleteMember/${userId}`);
+};
