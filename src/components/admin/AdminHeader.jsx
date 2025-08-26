@@ -1,8 +1,30 @@
 import React from 'react';
 import { Navbar, Nav, Container } from 'react-bootstrap';
 import { User, Settings, LogOut } from 'lucide-react';
+import { logout } from '../../api/AuthApi';
 
-const AdminHeader = () => {
+const AdminHeader = ({ onLogout }) => {
+  const handleLogout = async () => {
+    try {
+      const currentUser = JSON.parse(localStorage.getItem('tm_current_user'));
+      if (currentUser) {
+        const userId = currentUser.userId || currentUser.id;
+        // Send the full user object to satisfy backend DTO requirements (e.g., address not null)
+        const userRequestDTO = currentUser;
+        // Minimal debug
+        console.log('Admin logout payload:', { userId, userRequestDTO });
+        if (userId) {
+          await logout(userRequestDTO, userId);
+        }
+      }
+      if (onLogout) onLogout();
+    } catch (error) {
+      console.error('Logout failed:', error);
+      localStorage.removeItem('tm_current_user');
+      if (onLogout) onLogout();
+    }
+  };
+
   return (
     <Navbar bg="white" expand="lg" className="shadow-sm border-bottom">
       <Container fluid>
@@ -20,7 +42,12 @@ const AdminHeader = () => {
               <Settings size={18} className="me-2" />
               Settings
             </Nav.Link>
-            <Nav.Link href="#" className="d-flex align-items-center text-danger">
+            <Nav.Link 
+              href="#" 
+              className="d-flex align-items-center text-danger"
+              onClick={handleLogout}
+              style={{ cursor: 'pointer' }}
+            >
               <LogOut size={18} className="me-2" />
               Logout
             </Nav.Link>

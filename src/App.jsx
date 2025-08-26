@@ -15,7 +15,7 @@ import AssignRole from './components/assign-role/AssignRole';
 import { Users, UserPlus, Calendar, Settings } from 'lucide-react';
 import './App.css';
 
-function App() {
+function App({ onLogout }) {
   const [users, setUsers] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -225,6 +225,13 @@ function App() {
     }
   };
 
+  const handleLogout = () => {
+    // Call the parent logout handler to redirect to login page
+    if (onLogout) {
+      onLogout();
+    }
+  };
+
   const renderDashboard = () => (
     <div>
       <div className="mb-4">
@@ -388,7 +395,7 @@ function App() {
 
   return (
     <div className="min-vh-100 bg-light">
-      <AdminHeader />
+      <AdminHeader onLogout={handleLogout} />
       
       <div className="d-flex">
         <AdminSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
