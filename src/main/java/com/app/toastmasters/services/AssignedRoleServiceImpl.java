@@ -51,20 +51,24 @@ public class AssignedRoleServiceImpl implements AssignedRoleService{
         User userData = user.get();
         Meeting meetingData = meeting.get();
 
+        assignedRoleRepository.deleteAllByUserAndMeeting(userData, meetingData);
+
         List<AssignedRole> assignedRolesAddList = new ArrayList<>();
 
         for(String roleName : assignedRoleList){
             AssignedRole assignedRole = new AssignedRole();
             Roles roleData = roleRepository.findByRoleName(roleName);
-            AssignedRole assignedRoleExists =
-                    assignedRoleRepository.findByUserAndRoleAndMeeting(userData, roleData, meetingData);
-            if(assignedRoleExists != null)
-                continue;
+
+//            AssignedRole assignedRoleExists =
+//                    assignedRoleRepository.findByUserAndRoleAndMeeting(userData, roleData, meetingData);
+//            if(assignedRoleExists != null)
+//                continue;
             assignedRole.setRole(roleData);
             assignedRole.setUser(userData);
             assignedRole.setMeeting(meetingData);
             assignedRolesAddList.add(assignedRole);
         }
+
         List<AssignedRole> assignedRoles = assignedRoleRepository.saveAll(assignedRolesAddList);
         List<AssignedRoleResponseDTO> dtoList = assignedRoles.stream()
                 .map(mapper::toAssignedRoleDTO)

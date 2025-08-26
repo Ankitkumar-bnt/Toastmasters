@@ -17,4 +17,7 @@ public interface AssignedRoleRepository extends JpaRepository<AssignedRole, Inte
 
     @Transactional
     void deleteByUserAndMeetingAndRole(User user, Meeting meeting, Roles role);
+
+    @Transactional
+    void deleteAllByUserAndMeeting(User userData, Meeting meetingData);
 }

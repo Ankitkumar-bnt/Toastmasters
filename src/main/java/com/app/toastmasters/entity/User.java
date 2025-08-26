@@ -33,7 +33,7 @@ public class User {
     @Column(nullable = false)
     private LocalDate joinDate = LocalDate.now();
 
-    private String active = "true";
+    private String active = "false";
 
     @Column(nullable = false)
     private String address;

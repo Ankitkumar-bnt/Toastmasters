@@ -5,6 +5,8 @@ public class Constant {
 	// User Constants
 	public static String USER_LOGIN_SUCCESS = "User login successfully";
 	public static String USER_LOGIN_FAILED = "User login failed";
+	public static String USER_STATUS_UPDATE_FAILED = "User status update failed";
+	public static String USER_LOGOUT_FAILED = "User logout failed";
 	public static String MEMBER_ADDED_SUCCESS = "New member added successfully";
 	public static String FOUND_ALL_MEMBERS = "List of all members";
 	public static String MEMBER_NOT_FOUND = "Member list is empty";
