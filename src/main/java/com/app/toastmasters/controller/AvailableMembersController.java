@@ -1,6 +1,7 @@
 package com.app.toastmasters.controller;
 
 import com.app.toastmasters.dto.responseDTO.AvailableMemberResponseDTO;
+import com.app.toastmasters.dto.responseDTO.UserResponseDTO;
 import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.User;
 import com.app.toastmasters.message.ResponseMessage;
@@ -33,5 +34,10 @@ public class AvailableMembersController {
         return availableMembersService.getAllMemberAvailability();
     }
 
+    @GetMapping("/getAvailabilityById/{userId}")
+    public ResponseEntity<ResponseMessage<List<AvailableMemberResponseDTO>>> getUserAvailabilityByUserId(@PathVariable int userId){
+
+        return availableMembersService.getUserAvailabilityByUserId(userId);
+    }
 
 }

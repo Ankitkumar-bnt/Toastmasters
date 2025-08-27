@@ -7,6 +7,7 @@ import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.User;
 import com.app.toastmasters.exceptions.EmptyListException;
 import com.app.toastmasters.exceptions.InvalidUserIdAndMeetingIdException;
+import com.app.toastmasters.exceptions.MemberNotFoundException;
 import com.app.toastmasters.mapper.AvailableMemberMapper;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.repository.AvailableMembersRepository;
@@ -73,6 +74,27 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
                 new ResponseMessage<List<AvailableMemberResponseDTO>>(HttpStatus.OK, Constant.FOUND_ALL_MEMBERS,
                         allMembers.stream()
                                 .map(mapper::toDTO)
+                                .collect(Collectors.toList()));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
+    @Override
+    public ResponseEntity<ResponseMessage<List<AvailableMemberResponseDTO>>> getUserAvailabilityByUserId(int userId) {
+        Optional<User> user = userRepository.findById(userId);
+
+        if(user == null)
+            throw new MemberNotFoundException(Constant.MEMBER_NOT_FOUND);
+        User userData = user.get();
+
+        List<AvailableMembers> getAvailability = availableMembersRepository.findAllByUser(userData);
+
+        if(getAvailability.isEmpty())
+            throw new MemberNotFoundException(Constant.MEMBER_NOT_FOUND);
+
+        ResponseMessage<List<AvailableMemberResponseDTO>> responseMessage =
+                new ResponseMessage<List<AvailableMemberResponseDTO>>(HttpStatus.OK,
+                        Constant.FOUND_ALL_AVAILABLE_MEMBER,
+                        getAvailability.stream().map(x-> mapper.toDTO(x))
                                 .collect(Collectors.toList()));
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }

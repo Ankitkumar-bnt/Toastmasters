@@ -58,15 +58,14 @@ public class PreferredRoleServiceImpl implements PreferredRoleService{
         User userData = user.get();
         Meeting meetingData = meeting.get();
 
+        preferredRoleRepository.deleteAllByUserAndMeeting(userData, meetingData);
+
         List<PreferredRole> preferredRolesAddList = new ArrayList<>();
 
         for(String roleName : preferredRoleList){
             PreferredRole preferredRole = new PreferredRole();
             Roles roleData = roleRepository.findByRoleName(roleName);
-            PreferredRole preferrenceExists =
-                    preferredRoleRepository.findByUserAndRoleAndMeeting(userData, roleData, meetingData);
-            if(preferrenceExists != null)
-                continue;
+
             preferredRole.setRole(roleData);
             preferredRole.setUser(userData);
             preferredRole.setMeeting(meetingData);

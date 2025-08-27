@@ -23,4 +23,7 @@ public interface PreferredRoleRepository extends JpaRepository<PreferredRole, In
 
     @Transactional
     void deleteByUserAndMeetingAndRole(User user, Meeting meeting, Roles role);
+
+    @Transactional
+    void deleteAllByUserAndMeeting(User userData, Meeting meetingData);
 }

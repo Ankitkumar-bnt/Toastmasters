@@ -59,10 +59,6 @@ public class AssignedRoleServiceImpl implements AssignedRoleService{
             AssignedRole assignedRole = new AssignedRole();
             Roles roleData = roleRepository.findByRoleName(roleName);
 
-//            AssignedRole assignedRoleExists =
-//                    assignedRoleRepository.findByUserAndRoleAndMeeting(userData, roleData, meetingData);
-//            if(assignedRoleExists != null)
-//                continue;
             assignedRole.setRole(roleData);
             assignedRole.setUser(userData);
             assignedRole.setMeeting(meetingData);

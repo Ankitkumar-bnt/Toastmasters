@@ -14,6 +14,7 @@ public class Constant {
 	public static String MEMBER_UPDATE_FAILS = "Member not found! updated failed";
 	public static String MEMBER_DELETE_SUCCESS = "Member deleted successfully";
 	public static String MEMBER_DELETE_FAILS = "Member not found! delete failed";
+	public static String FOUND_ALL_AVAILABLE_MEMBER = "Found all meeting for the user";
 
 	// Roles Constants
 	public static final String ROLE_ADDED_SUCCESS = "Role added successfully";
