@@ -142,12 +142,17 @@ const MeetingDetailsView = ({ meeting, onBack, onChooseRole }) => {
 
       <Card className="shadow rounded-3 border-0">
         <Card.Body className="p-4" style={{ minHeight: '200px' }}>
-          {/* Theme centered */}
+          {/* Theme and ID */}
           <div className="text-center mb-4">
-            <h4 className="mb-1">
-              {meeting.meetingTheme || 'No Theme'}
-            </h4>
-            <div className="text-muted">Meeting theme</div>
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <h4 className="mb-0">
+                {meeting.meetingTheme || 'No Theme'}
+              </h4>
+              <Badge bg="secondary" className="ms-2" style={{ fontSize: '0.9rem' }}>
+                Meeting ID: {meeting.meetingId || 'N/A'}
+              </Badge>
+            </div>
+            <div className="text-muted">Meeting Details</div>
           </div>
 
           {/* Date/Day left, Time right */}

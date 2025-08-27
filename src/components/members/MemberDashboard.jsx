@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Container, Nav, Navbar, Card } from 'react-bootstrap';
-import { Calendar, Star, User, LogOut, Bell } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Container, Nav, Navbar, Card, Modal, Button, Form } from 'react-bootstrap';
+import { Calendar, Star, User, LogOut, Bell, Save, Edit } from 'lucide-react';
 import { logout } from '../../api/AuthApi';
 import ViewMeetings from './ViewMeetings';
 import MeetingDetailsView from './MeetingDetailsView';
@@ -10,6 +10,51 @@ import { getAllMeetings } from '../../api/MeetingApi';
 function MemberDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('view-meeting');
   const [selectedMeeting, setSelectedMeeting] = useState(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [formData, setFormData] = useState({});
+  
+  // Get current user from localStorage
+  const currentUserRaw = localStorage.getItem('tm_current_user');
+  const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : {};
+
+  // Initialize form data when currentUser changes
+  useEffect(() => {
+    if (currentUser) {
+      setFormData({
+        userName: currentUser.userName || '',
+        userEmail: currentUser.userEmail || '',
+        userContact: currentUser.userContact || '',
+        address: currentUser.address || '',
+        gender: currentUser.gender || '',
+        dob: currentUser.dob ? new Date(currentUser.dob).toISOString().split('T')[0] : '',
+        hobbies: currentUser.hobbies || ''
+      });
+    }
+  }, [currentUser]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    // Here you would typically call an API to update the user
+    // For now, we'll just update the local storage
+    try {
+      const updatedUser = { ...currentUser, ...formData };
+      localStorage.setItem('tm_current_user', JSON.stringify(updatedUser));
+      setShowEditModal(false);
+      // Show success message or refresh the page
+      window.location.reload();
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -49,12 +94,7 @@ function MemberDashboard({ onLogout }) {
           setActiveTab('view-meeting');
         }} />;
       case 'profile':
-        return (
-          <Card className="shadow-sm p-4">
-            <h4>Profile</h4>
-            <p className="text-muted">View and edit your profile information.</p>
-          </Card>
-        );
+        return null; // We'll handle profile in a modal now
       default:
         return null;
     }
@@ -84,7 +124,7 @@ function MemberDashboard({ onLogout }) {
                 <Star size={18} className="me-2" />
                 Preferred role
               </Nav.Link>
-              <Nav.Link onClick={() => setActiveTab('profile')} className={activeTab === 'profile' ? 'fw-semibold' : ''}>
+              <Nav.Link onClick={() => setShowProfileModal(true)}>
                 <User size={18} className="me-2" />
                 Profile
               </Nav.Link>
@@ -104,6 +144,238 @@ function MemberDashboard({ onLogout }) {
       <Container fluid className="p-4">
         {renderContent()}
       </Container>
+
+      {/* Profile Modal */}
+      <Modal show={showProfileModal} onHide={() => setShowProfileModal(false)} centered size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>My Profile</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div className="row">
+            <div className="col-md-6">
+              <div className="mb-3">
+                <h5>{currentUser.userName || 'User'}</h5>
+                <p className="text-muted">{currentUser.userEmail || 'No email provided'}</p>
+              </div>
+              
+              <div className="mb-3">
+                <h6>Contact Information</h6>
+                <div className="border rounded p-3">
+                  <div className="mb-2">
+                    <small className="text-muted d-block">Email</small>
+                    <div>{currentUser.userEmail || 'Not provided'}</div>
+                  </div>
+                  <div className="mb-2">
+                    <small className="text-muted d-block">Contact Number</small>
+                    <div>{currentUser.userContact || 'Not provided'}</div>
+                  </div>
+                  <div className="mb-2">
+                    <small className="text-muted d-block">Address</small>
+                    <div>{currentUser.address || 'Not provided'}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className="col-md-6">
+              <div className="mb-3">
+                <h6>Personal Details</h6>
+                <div className="border rounded p-3">
+                  <div className="row">
+                    <div className="col-6 mb-2">
+                      <small className="text-muted d-block">Gender</small>
+                      <div>{currentUser.gender || 'Not specified'}</div>
+                    </div>
+                    <div className="col-6 mb-2">
+                      <small className="text-muted d-block">Date of Birth</small>
+                      <div>{currentUser.dob ? new Date(currentUser.dob).toLocaleDateString() : 'Not specified'}</div>
+                    </div>
+                  </div>
+                  <div className="mb-2">
+                    <small className="text-muted d-block">Hobbies</small>
+                    <div>{currentUser.hobbies || 'Not specified'}</div>
+                  </div>
+                  {currentUser.mentorId && (
+                    <div className="mb-2">
+                      <small className="text-muted d-block">Mentor ID</small>
+                      <div>{currentUser.mentorId}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="mb-3">
+                <h6>Account Information</h6>
+                <div className="border rounded p-3">
+                  <div className="row">
+                    <div className="col-6 mb-2">
+                      <small className="text-muted d-block">User ID</small>
+                      <div>{currentUser.userId || 'N/A'}</div>
+                    </div>
+                    <div className="col-6 mb-2">
+                      <small className="text-muted d-block">Member Since</small>
+                      <div>{currentUser.joinDate ? new Date(currentUser.joinDate).toLocaleDateString() : 'N/A'}</div>
+                    </div>
+                  </div>
+                  <div className="row">
+                    <div className="col-6 mb-2">
+                      <small className="text-muted d-block">Account Status</small>
+                      <div className="d-flex align-items-center">
+                        <span className={`me-2 badge ${currentUser.active === 'true' ? 'bg-success' : 'bg-secondary'}`}>
+                          {currentUser.active === 'true' ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="col-6 mb-2">
+                      <small className="text-muted d-block">User Type</small>
+                      <div className="text-capitalize">{currentUser.userType || 'user'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div className="d-flex justify-content-between mt-3">
+            <Button 
+              variant="outline-primary" 
+              onClick={() => {
+                setShowProfileModal(false);
+                setShowEditModal(true);
+              }}
+            >
+              <Edit size={16} className="me-1" /> Update Profile
+            </Button>
+            <Button variant="secondary" onClick={() => setShowProfileModal(false)}>
+              Close
+            </Button>
+          </div>
+        </Modal.Body>
+      </Modal>
+
+      {/* Edit Profile Modal */}
+      <Modal show={showEditModal} onHide={() => setShowEditModal(false)} centered size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Update Profile</Modal.Title>
+        </Modal.Header>
+        <Form onSubmit={handleSubmit}>
+          <Modal.Body>
+            <div className="row">
+              <div className="col-md-6">
+                <Form.Group className="mb-3">
+                  <Form.Label>Full Name</Form.Label>
+                  <Form.Control 
+                    type="text" 
+                    name="userName"
+                    value={formData.userName || ''}
+                    onChange={handleInputChange}
+                    required 
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Email</Form.Label>
+                  <Form.Control 
+                    type="email" 
+                    name="userEmail"
+                    value={formData.userEmail || ''}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Contact Number</Form.Label>
+                  <Form.Control 
+                    type="tel" 
+                    name="userContact"
+                    value={formData.userContact || ''}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Address</Form.Label>
+                  <Form.Control 
+                    as="textarea" 
+                    rows={3}
+                    name="address"
+                    value={formData.address || ''}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Form.Group>
+              </div>
+
+              <div className="col-md-6">
+                <Form.Group className="mb-3">
+                  <Form.Label>Gender</Form.Label>
+                  <Form.Select 
+                    name="gender"
+                    value={formData.gender || ''}
+                    onChange={handleInputChange}
+                    required
+                  >
+                    <option value="">Select Gender</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </Form.Select>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Date of Birth</Form.Label>
+                  <Form.Control 
+                    type="date" 
+                    name="dob"
+                    value={formData.dob || ''}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Hobbies</Form.Label>
+                  <Form.Control 
+                    type="text" 
+                    name="hobbies"
+                    value={formData.hobbies || ''}
+                    onChange={handleInputChange}
+                    placeholder="e.g., Reading, Sports, Music"
+                  />
+                </Form.Group>
+
+                <div className="border rounded p-3 bg-light">
+                  <Form.Group className="mb-2">
+                    <Form.Label className="text-muted small mb-0">User ID</Form.Label>
+                    <div>{currentUser.userId || 'N/A'}</div>
+                  </Form.Group>
+                  <Form.Group className="mb-2">
+                    <Form.Label className="text-muted small mb-0">Member Since</Form.Label>
+                    <div>{currentUser.joinDate ? new Date(currentUser.joinDate).toLocaleDateString() : 'N/A'}</div>
+                  </Form.Group>
+                  {currentUser.mentorId && (
+                    <Form.Group>
+                      <Form.Label className="text-muted small mb-0">Mentor ID</Form.Label>
+                      <div>{currentUser.mentorId}</div>
+                    </Form.Group>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline-secondary" onClick={() => setShowEditModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit">
+              <Save size={16} className="me-1" /> Save Changes
+            </Button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
     </div>
   );
 }

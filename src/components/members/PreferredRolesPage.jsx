@@ -243,8 +243,9 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
                   style={{ cursor: 'pointer' }}
                   onClick={() => onMeetingClick(meeting)}
                 >
-                  <Card.Header className="bg-light">
+                  <Card.Header className="bg-light d-flex justify-content-between align-items-center">
                     <h5 className="mb-0">{theme}</h5>
+                    <Badge bg="secondary" className="ms-2">ID: {meetingId}</Badge>
                   </Card.Header>
                   <Card.Body>
                     <div className="mb-3">
@@ -259,11 +260,15 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
                       </div>
                       <div className="d-flex flex-wrap gap-1">
                         {preferredRoles.length > 0 ? (
-                          preferredRoles.map((role, idx) => (
-                            <Badge key={`pref-${idx}`} bg="info" className="me-1 mb-1">
-                              {getRoleName(role)}
-                            </Badge>
-                          ))
+                          preferredRoles.map((role, idx) => {
+                            const roleName = getRoleName(role);
+                            return (
+                              <Badge key={`pref-${idx}`} bg="info" className="me-1 mb-1 d-flex align-items-center">
+                                <span className="me-1">{idx + 1}.</span>
+                                {roleName}
+                              </Badge>
+                            );
+                          })
                         ) : (
                           <span className="text-muted">No preferred roles selected</span>
                         )}

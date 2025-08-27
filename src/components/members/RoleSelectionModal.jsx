@@ -104,7 +104,7 @@ const RoleSelectionModal = ({ show, onClose, userId, meetingId, onSaved }) => {
                 return (
                   <ListGroup.Item key={idx} action onClick={() => !disabled && toggleRole(name)}>
                     <div className="d-flex align-items-center justify-content-between">
-                      <div>
+                      <div className="d-flex align-items-center">
                         <input
                           type="checkbox"
                           className="form-check-input me-2"
@@ -115,7 +115,12 @@ const RoleSelectionModal = ({ show, onClose, userId, meetingId, onSaved }) => {
                         />
                         {name}
                       </div>
-                      {checked && <Badge bg="success">Selected</Badge>}
+                      {checked && (
+                        <Badge bg="success">
+                          {selected.indexOf(name) + 1}
+                          {['st', 'nd', 'rd'][selected.indexOf(name)] || 'th'}
+                        </Badge>
+                      )}
                     </div>
                   </ListGroup.Item>
                 );

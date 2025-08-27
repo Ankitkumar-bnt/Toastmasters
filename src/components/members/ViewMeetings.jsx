@@ -156,6 +156,7 @@ const ViewMeetings = ({ onOpenDetails }) => {
           <Table responsive hover className="mb-0">
             <thead className="bg-light">
               <tr>
+                <th className="px-3 py-3">ID</th>
                 <th className="px-3 py-3">
                   <Calendar size={16} className="me-2" />
                   Date
@@ -177,6 +178,9 @@ const ViewMeetings = ({ onOpenDetails }) => {
                     style={{ cursor: onOpenDetails ? 'pointer' : 'default' }}
                     title={onOpenDetails ? 'Click to view details' : undefined}
                   >
+                    <td className="px-3 py-3 fw-semibold">
+                      {meeting.meetingId || 'N/A'}
+                    </td>
                     <td className="px-3 py-3">
                       {formatDate(meeting.meetingDate)}
                       {meeting.category && meeting.category !== 'Regular' && (
@@ -194,7 +198,7 @@ const ViewMeetings = ({ onOpenDetails }) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="4" className="text-center py-4 text-muted">
+                  <td colSpan="6" className="text-center py-4 text-muted">
                     No meetings found
                   </td>
                 </tr>
