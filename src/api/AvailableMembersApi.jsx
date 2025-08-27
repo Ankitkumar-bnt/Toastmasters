@@ -12,9 +12,12 @@ export const getAllMemberAvailability = async () => {
 	return axios.get(`${API_BASE_URL}/getAllMemberAvailability`);
 };
 
+export const getAvailabilityById = async (userId) => {
+  return axios.get(`${API_BASE_URL}/getAvailabilityById/${userId}`);
+};
+
 export default {
 	markAvailability,
 	getAllMemberAvailability,
+	getAvailabilityById,
 };
-
-

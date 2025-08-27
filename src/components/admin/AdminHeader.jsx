@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navbar, Nav, Container } from 'react-bootstrap';
-import { User, Settings, LogOut } from 'lucide-react';
+import { User, Settings, LogOut, Bell } from 'lucide-react';
 import { logout } from '../../api/AuthApi';
 
 const AdminHeader = ({ onLogout }) => {
@@ -41,6 +41,10 @@ const AdminHeader = ({ onLogout }) => {
             <Nav.Link href="#" className="d-flex align-items-center me-3">
               <Settings size={18} className="me-2" />
               Settings
+            </Nav.Link>
+            <Nav.Link href="#" className="d-flex align-items-center me-3">
+              <Bell size={18} className="me-2" />
+              Notifications
             </Nav.Link>
             <Nav.Link 
               href="#" 

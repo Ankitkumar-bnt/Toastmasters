@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
 import { Container, Nav, Navbar, Card } from 'react-bootstrap';
-import { Calendar, Star, User, LogOut } from 'lucide-react';
+import { Calendar, Star, User, LogOut, Bell } from 'lucide-react';
 import { logout } from '../../api/AuthApi';
+import ViewMeetings from './ViewMeetings';
+import MeetingDetailsView from './MeetingDetailsView';
+import PreferredRolesPage from './PreferredRolesPage';
+import { getAllMeetings } from '../../api/MeetingApi';
 
 function MemberDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('view-meeting');
+  const [selectedMeeting, setSelectedMeeting] = useState(null);
 
   const handleLogout = async () => {
     try {
@@ -29,18 +34,20 @@ function MemberDashboard({ onLogout }) {
     switch (activeTab) {
       case 'view-meeting':
         return (
-          <Card className="shadow-sm p-4">
-            <h4>Meetings</h4>
-            <p className="text-muted">View upcoming and past meetings.</p>
-          </Card>
+          selectedMeeting ? (
+            <MeetingDetailsView
+              meeting={selectedMeeting}
+              onBack={() => setSelectedMeeting(null)}
+            />
+          ) : (
+            <ViewMeetings onOpenDetails={(m) => setSelectedMeeting(m)} />
+          )
         );
       case 'preferred-role':
-        return (
-          <Card className="shadow-sm p-4">
-            <h4>Preferred Role</h4>
-            <p className="text-muted">Set and manage your preferred roles.</p>
-          </Card>
-        );
+        return <PreferredRolesPage onMeetingClick={(meeting) => {
+          setSelectedMeeting(meeting);
+          setActiveTab('view-meeting');
+        }} />;
       case 'profile':
         return (
           <Card className="shadow-sm p-4">
@@ -63,7 +70,13 @@ function MemberDashboard({ onLogout }) {
           <Navbar.Toggle aria-controls="member-navbar" />
           <Navbar.Collapse id="member-navbar">
             <Nav className="ms-auto align-items-center">
-              <Nav.Link onClick={() => setActiveTab('view-meeting')} className={activeTab === 'view-meeting' ? 'fw-semibold' : ''}>
+              <Nav.Link 
+                onClick={() => {
+                  setActiveTab('view-meeting');
+                  setSelectedMeeting(null); // Reset selected meeting when clicking 'View meeting'
+                }} 
+                className={activeTab === 'view-meeting' ? 'fw-semibold' : ''}
+              >
                 <Calendar size={18} className="me-2" />
                 View meeting
               </Nav.Link>
@@ -74,6 +87,10 @@ function MemberDashboard({ onLogout }) {
               <Nav.Link onClick={() => setActiveTab('profile')} className={activeTab === 'profile' ? 'fw-semibold' : ''}>
                 <User size={18} className="me-2" />
                 Profile
+              </Nav.Link>
+              <Nav.Link href="#" className="d-flex align-items-center">
+                <Bell size={18} className="me-2" />
+                Notifications
               </Nav.Link>
               <Nav.Link onClick={handleLogout} className="text-danger">
                 <LogOut size={18} className="me-2" />
