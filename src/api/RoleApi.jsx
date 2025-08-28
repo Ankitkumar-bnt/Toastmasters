@@ -49,10 +49,25 @@ export const updateRole = async (roleId, roleData) => {
 // Delete role
 export const deleteRole = async (roleId) => {
   try {
-    const response = await axios.delete(`${BASE_URL}/deleteRole/${roleId}`);
+    console.log('Attempting to delete role with ID:', roleId);
+    const response = await axios.delete(`${BASE_URL}/deleteRole/${roleId}`, {
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    console.log('Delete role response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error deleting role:', error);
+    console.error('Error deleting role:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        data: error.config?.data
+      }
+    });
     throw error;
   }
 };

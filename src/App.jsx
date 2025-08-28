@@ -177,7 +177,12 @@ function App({ onLogout }) {
           showConfirmButton: false,
         });
       } else {
-        await addMeeting(meetingData);
+        // Add deleteStatus: 1 when creating a new meeting
+        const meetingWithDeleteStatus = {
+          ...meetingData,
+          deleteStatus: 1
+        };
+        await addMeeting(meetingWithDeleteStatus);
         Swal.fire({
           icon: 'success',
           title: 'Success!',

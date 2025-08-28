@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Form, Button, Row, Col, Badge, Alert, Spinner, Table, Modal, Pagination, InputGroup } from 'react-bootstrap';
 import { Calendar, Clock, MapPin, Users, Settings, Plus, Edit, Trash2, Search } from 'lucide-react';
+import Swal from 'sweetalert2';
 import { getAllMeetings } from '../../api/MeetingApi';
 import { getAllMemberAvailability } from '../../api/AvailableMembersApi';
 import { getAllMembers } from '../../api/UserApi';
@@ -28,7 +29,9 @@ const AssignRole = () => {
   const [roleFormData, setRoleFormData] = useState({ roleName: '', description: '' });
   const [allRolesData, setAllRolesData] = useState([]);
   const [currentRolePage, setCurrentRolePage] = useState(1);
-  const rolesPerPage = 6;
+  const ROLES_PER_PAGE = 6; // Set constant for roles per page
+  const [totalRolePages, setTotalRolePages] = useState(1);
+  const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   
   // Role assignment modal state
   const [showAssignRoleModal, setShowAssignRoleModal] = useState(false);
@@ -60,14 +63,20 @@ const AssignRole = () => {
   }, [searchTerm, allMeetings]);
 
   useEffect(() => {
-    loadUpcomingMeetings();
-    loadAllMembers();
-    loadAvailableRoles();
+    const initializeData = async () => {
+      await Promise.all([
+        loadUpcomingMeetings(),
+        loadAllMembers(),
+        loadAvailableRoles()
+      ]);
+    };
+    
+    initializeData();
   }, []);
 
   // Auto-select the next upcoming meeting when meetings are loaded
   useEffect(() => {
-    if (meetings.length > 0 && !selectedMeeting) {
+    if (meetings.length > 0 && !selectedMeetingId) {
       // Find the next upcoming meeting (earliest date from today)
       const today = new Date();
       const nextMeeting = meetings.find(meeting => {
@@ -76,7 +85,7 @@ const AssignRole = () => {
         const meetingDay = new Date(meetingDate.getFullYear(), meetingDate.getMonth(), meetingDate.getDate());
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         return meetingDay >= todayStart;
-      });
+      }) || meetings[0]; // Fallback to first meeting if no future meetings
 
       if (nextMeeting) {
         setSelectedMeeting(nextMeeting);
@@ -84,7 +93,7 @@ const AssignRole = () => {
         loadAvailableMembers(nextMeeting.meetingId);
       }
     }
-  }, [meetings, selectedMeeting]);
+  }, [meetings, selectedMeetingId]);
 
   const loadUpcomingMeetings = async () => {
     try {
@@ -131,20 +140,63 @@ const AssignRole = () => {
 
   const loadAvailableRoles = async () => {
     try {
+      setIsLoadingRoles(true);
+      // Fetch roles from the API
       const response = await getAllRoles();
-      const roles = response.data.data || [];
-      setAllRolesData(roles);
-      // Extract role names from the response
-      const roleNames = roles.map(role => role.roleName || role.name || role);
+      
+      // Handle the API response - ensure we have an array of roles
+      let roles = [];
+      if (Array.isArray(response)) {
+        roles = response;
+      } else if (response && Array.isArray(response.data)) {
+        roles = response.data;
+      } else if (response && response.data && typeof response.data === 'object') {
+        // If the response is an object with role data, convert it to an array
+        roles = Object.entries(response.data).map(([id, role]) => ({
+          roleId: role.roleId || id,  // Use role.roleId if available, otherwise use the key
+          roleName: role.roleName || role.name || role,
+          description: role.description || ''
+        }));
+      }
+      
+      // Ensure each role has both roleId and roleName properties to match backend
+      const processedRoles = roles.map(role => ({
+        roleId: role.roleId || role.id,  // Prefer roleId as per backend entity
+        roleName: role.roleName || role.name || role,
+        description: role.description || ''
+      }));
+      
+      // Update state with all roles
+      setAllRolesData(processedRoles);
+      
+      // Calculate total pages for pagination
+      const totalRoles = processedRoles.length;
+      const calculatedTotalPages = Math.ceil(totalRoles / ROLES_PER_PAGE);
+      setTotalRolePages(calculatedTotalPages > 0 ? calculatedTotalPages : 1);
+      
+      // Reset to first page if current page is out of bounds
+      if (currentRolePage > calculatedTotalPages && calculatedTotalPages > 0) {
+        setCurrentRolePage(1);
+      }
+      
+      // Extract role names for the role selector
+      const roleNames = processedRoles.map(role => role.roleName);
       setAvailableRoles(roleNames);
+      
+      return processedRoles;
     } catch (err) {
       console.error('Error loading roles:', err);
+      setError('Failed to load roles. Using default roles.');
       // Fallback to default roles if API fails
-      setAvailableRoles([
+      const defaultRoles = [
         'Toastmaster', 'General Evaluator', 'Timer', 'Ah Counter', 'Grammarian',
         'Table Topics Master', 'Speaker 1', 'Speaker 2', 'Speaker 3',
         'Evaluator 1', 'Evaluator 2', 'Evaluator 3', 'Sergeant at Arms'
-      ]);
+      ];
+      setAvailableRoles(defaultRoles);
+      return defaultRoles.map(name => ({ roleName: name }));
+    } finally {
+      setIsLoadingRoles(false);
     }
   };
 
@@ -209,10 +261,19 @@ const AssignRole = () => {
     const meetingId = e.target.value;
     if (meetingId) {
       const meeting = meetings.find(m => String(m.meetingId) === String(meetingId));
-      setSelectedMeeting(meeting);
-      loadAvailableMembers(meetingId);
+      if (meeting) {
+        setSelectedMeeting(meeting);
+        setSelectedMeetingId(meetingId);
+        // Clear previous data
+        setAvailableMembers([]);
+        setMemberRoles({});
+        setAssignedRoles({});
+        // Load new data
+        loadAvailableMembers(meetingId);
+      }
     } else {
       setSelectedMeeting(null);
+      setSelectedMeetingId('');
       setAvailableMembers([]);
       setMemberRoles({});
       setAssignedRoles({});
@@ -310,58 +371,108 @@ const AssignRole = () => {
 
   // Role management functions
   const handleManageRoles = () => {
-    setCurrentRolePage(1); // Reset to first page when opening modal
-    setShowRoleModal(true);
-  };
-
-  // Calculate pagination for roles
-  const totalRolePages = Math.ceil((allRolesData.length || 0) / rolesPerPage);
-  const startRoleIndex = (currentRolePage - 1) * rolesPerPage;
-  const endRoleIndex = startRoleIndex + rolesPerPage;
-  const currentRoles = allRolesData.slice(startRoleIndex, endRoleIndex) || [];
-
-  const handleRolePageChange = (pageNumber) => {
-    setCurrentRolePage(pageNumber);
+    setShowRoleForm(false);
+    setRoleFormData({ roleName: '', description: '' });
   };
 
   const handleAddRole = () => {
-    setEditingRole(null);
     setRoleFormData({ roleName: '', description: '' });
+    setEditingRole(null);
     setShowRoleForm(true);
   };
 
   const handleEditRole = (role) => {
-    setEditingRole(role);
-    setRoleFormData({ 
-      roleName: role.roleName || role.name || '', 
-      description: role.description || '' 
+    setRoleFormData({
+      roleName: role.roleName || role.name || '',
+      description: role.description || ''
     });
+    setEditingRole(role);
     setShowRoleForm(true);
   };
 
-  const handleDeleteRole = async (roleId) => {
+  const handleDeleteRole = async (role) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: 'You are about to delete this role. This action cannot be undone!',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true
+    });
+
+    if (!result.isConfirmed) {
+      return;
+    }
+
     try {
+      // Make sure we're using the correct roleId field (role.roleId or role.id)
+      const roleId = role.roleId || role.id;
+      if (!roleId) {
+        throw new Error('No valid role ID found for deletion');
+      }
+      
+      console.log('Deleting role with ID:', roleId);
       await deleteRole(roleId);
-      loadAvailableRoles();
+      
+      // Show success message
+      await Swal.fire({
+        title: 'Deleted!',
+        text: 'The role has been deleted.',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      });
+      
+      // Refresh roles
+      await loadAvailableRoles();
     } catch (err) {
-      setError('Failed to delete role');
-      setTimeout(() => setError(''), 3000);
+      console.error('Error deleting role:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to delete role';
+      
+      await Swal.fire({
+        title: 'Error!',
+        text: errorMessage,
+        icon: 'error',
+        confirmButtonText: 'OK'
+      });
     }
   };
 
   const handleSubmitRole = async (e) => {
     e.preventDefault();
+    if (!roleFormData.roleName.trim()) {
+      setError('Role name is required');
+      return;
+    }
+
     try {
       if (editingRole) {
-        await updateRole(editingRole.roleId || editingRole.id, roleFormData);
+        // Update existing role
+        const roleId = editingRole.roleId || editingRole.id;
+        await updateRole(roleId, {
+          roleName: roleFormData.roleName,
+          description: roleFormData.description
+        });
+        setSuccess('Role updated successfully');
       } else {
-        await addRole(roleFormData);
+        // Add new role
+        await addRole({
+          roleName: roleFormData.roleName,
+          description: roleFormData.description
+        });
+        setSuccess('Role added successfully');
       }
-      loadAvailableRoles();
+      
+      // Refresh roles
+      await loadAvailableRoles();
       setShowRoleForm(false);
-      setRoleFormData({ roleName: '', description: '' });
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
-      setError('Failed to save role');
+      console.error('Error saving role:', err);
+      setError(`Failed to ${editingRole ? 'update' : 'add'} role: ${err.message}`);
       setTimeout(() => setError(''), 3000);
     }
   };
@@ -403,24 +514,13 @@ const AssignRole = () => {
             <Form.Label>Meeting</Form.Label>
             <Form.Select
               value={selectedMeetingId}
-              onChange={(e) => {
-                const meetingId = e.target.value;
-                setSelectedMeetingId(meetingId);
-                if (meetingId) {
-                  const meeting = filteredMeetings.find(m => String(m.meetingId) === String(meetingId));
-                  setSelectedMeeting(meeting);
-                  loadAvailableMembers(meetingId);
-                } else {
-                  setSelectedMeeting(null);
-                  setAvailableMembers([]);
-                }
-              }}
+              onChange={handleMeetingSelect}
               disabled={loading}
             >
               <option value="">Select a meeting...</option>
-              {meetings.map((meeting, index) => (
+              {meetings.map((meeting) => (
                 <option key={meeting.meetingId} value={meeting.meetingId}>
-                  {formatDate(meeting.meetingDate)} - {meeting.meetingTheme || 'No Theme'}{meeting.category === 'Special' ? ` 🔴 ${meeting.category}` : meeting.category === 'Contest' ? ` 🟡 ${meeting.category}` : ''}
+                  {formatDate(meeting.meetingDate)} - {meeting.meetingTheme || 'No Theme'}
                 </option>
               ))}
             </Form.Select>
@@ -588,96 +688,141 @@ const AssignRole = () => {
       </Modal>
 
       {/* Role Management Modal */}
-      <Modal show={showRoleModal} onHide={() => setShowRoleModal(false)} size="lg">
+      <Modal show={showRoleModal} onHide={() => setShowRoleModal(false)} size="lg" onShow={loadAvailableRoles}>
         <Modal.Header closeButton>
           <Modal.Title>Manage Roles</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h6>
-              All Roles: {allRolesData.length}
-              {totalRolePages > 1 && (
-                <span className="text-muted ms-2">
-                  (Page {currentRolePage} of {totalRolePages})
-                </span>
+          {isLoadingRoles ? (
+            <div className="text-center my-4">
+              <Spinner animation="border" variant="primary" />
+              <p className="mt-2">Loading roles...</p>
+            </div>
+          ) : (
+            <div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <h6>
+                  All Roles: {allRolesData?.length || 0}
+                  {totalRolePages > 1 && (
+                    <span className="text-muted ms-2">
+                      (Page {currentRolePage} of {totalRolePages})
+                    </span>
+                  )}
+                </h6>
+                <Button variant="primary" onClick={handleAddRole}>
+                  <Plus size={16} className="me-2" />
+                  Add Role
+                </Button>
+              </div>
+              
+              {allRolesData.length === 0 ? (
+                <Alert variant="info">No roles found. Add your first role to get started.</Alert>
+              ) : (
+                <div className="table-responsive">
+                  <Table striped bordered hover>
+                    <thead className="table-dark">
+                      <tr>
+                        <th>#</th>
+                        <th>Role Name</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const indexOfLastRole = currentRolePage * ROLES_PER_PAGE;
+                        const indexOfFirstRole = indexOfLastRole - ROLES_PER_PAGE;
+                        const currentRoles = allRolesData.slice(indexOfFirstRole, indexOfLastRole);
+                        
+                        return currentRoles.length > 0 ? (
+                          currentRoles.map((role, index) => {
+                            const actualIndex = indexOfFirstRole + index;
+                            return (
+                              <tr key={role.roleId || role.id || index}>
+                                <td>{actualIndex + 1}</td>
+                                <td>{role.roleName || role.name || 'N/A'}</td>
+                                <td>{role.description || 'No description available'}</td>
+                                <td>
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    className="me-2"
+                                    onClick={() => handleEditRole(role)}
+                                    title="Edit Role"
+                                  >
+                                    <Edit size={14} />
+                                  </Button>
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => handleDeleteRole(role)}
+                                    title="Delete Role"
+                                  >
+                                    <Trash2 size={14} />
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan="4" className="text-center text-muted py-3">
+                              No roles found on this page.
+                            </td>
+                          </tr>
+                        );
+                      })()}
+                    </tbody>
+                  </Table>
+                </div>
               )}
-            </h6>
-            <Button variant="primary" onClick={handleAddRole}>
-              <Plus size={16} className="me-2" />
-              Add Role
-            </Button>
-          </div>
           
-          <Table responsive>
-            <thead>
-              <tr>
-                <th>Role Name</th>
-                <th>Description</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentRoles.map((role, index) => (
-                <tr key={role.roleId || role.id || index}>
-                  <td>{role.roleName || role.name}</td>
-                  <td>{role.description || 'No description'}</td>
-                  <td>
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      className="me-2"
-                      onClick={() => handleEditRole(role)}
-                    >
-                      <Edit size={14} />
-                    </Button>
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => handleDeleteRole(role.roleId || role.id)}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-
-          {/* Pagination */}
-          {totalRolePages > 1 && (
-            <div className="d-flex justify-content-center mt-3">
-              <Pagination>
-                <Pagination.First 
-                  onClick={() => handleRolePageChange(1)} 
-                  disabled={currentRolePage === 1}
-                />
-                <Pagination.Prev 
-                  onClick={() => handleRolePageChange(currentRolePage - 1)} 
-                  disabled={currentRolePage === 1}
-                />
-                
-                {[...Array(totalRolePages)].map((_, index) => {
-                  const pageNumber = index + 1;
-                  return (
-                    <Pagination.Item
-                      key={pageNumber}
-                      active={pageNumber === currentRolePage}
-                      onClick={() => handleRolePageChange(pageNumber)}
-                    >
-                      {pageNumber}
-                    </Pagination.Item>
-                  );
-                })}
-                
-                <Pagination.Next 
-                  onClick={() => handleRolePageChange(currentRolePage + 1)} 
-                  disabled={currentRolePage === totalRolePages}
-                />
-                <Pagination.Last 
-                  onClick={() => handleRolePageChange(totalRolePages)} 
-                  disabled={currentRolePage === totalRolePages}
-                />
-              </Pagination>
+              {totalRolePages > 1 && (
+                <div className="d-flex justify-content-center mt-3">
+                  <Pagination>
+                    <Pagination.First 
+                      onClick={() => setCurrentRolePage(1)} 
+                      disabled={currentRolePage === 1}
+                    />
+                    <Pagination.Prev 
+                      onClick={() => setCurrentRolePage(p => Math.max(1, p - 1))} 
+                      disabled={currentRolePage === 1}
+                    />
+                    
+                    {Array.from({ length: Math.min(5, totalRolePages) }, (_, i) => {
+                      let pageNum;
+                      if (totalRolePages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentRolePage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentRolePage >= totalRolePages - 2) {
+                        pageNum = totalRolePages - 4 + i;
+                      } else {
+                        pageNum = currentRolePage - 2 + i;
+                      }
+                      
+                      return (
+                        <Pagination.Item
+                          key={pageNum}
+                          active={pageNum === currentRolePage}
+                          onClick={() => setCurrentRolePage(pageNum)}
+                        >
+                          {pageNum}
+                        </Pagination.Item>
+                      );
+                    })}
+                    
+                    <Pagination.Next 
+                      onClick={() => setCurrentRolePage(p => Math.min(totalRolePages, p + 1))} 
+                      disabled={currentRolePage === totalRolePages}
+                    />
+                    <Pagination.Last 
+                      onClick={() => setCurrentRolePage(totalRolePages)} 
+                      disabled={currentRolePage === totalRolePages}
+                    />
+                  </Pagination>
+                </div>
+              )}
             </div>
           )}
         </Modal.Body>
