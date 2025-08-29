@@ -13,7 +13,17 @@ const AdminSidebar = ({ activeTab, setActiveTab }) => {
   ];
 
   return (
-    <div className="bg-dark text-white min-vh-100 p-3" style={{ width: '250px', minWidth: '250px', flexShrink: 0 }}>
+    <div 
+      className="bg-dark text-white vh-100 p-3 position-fixed" 
+      style={{ 
+        width: '250px', 
+        left: 0,
+        top: 0,
+        overflowY: 'auto',
+        zIndex: 1000,
+        height: '100vh'
+      }}
+    >
       <div className="mb-4">
         <h5 className="text-center py-3 border-bottom border-secondary">
           Member Management

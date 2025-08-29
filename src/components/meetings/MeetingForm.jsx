@@ -1,39 +1,99 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import Swal from 'sweetalert2';
+import { getAllMeetings } from '../../api/MeetingApi';
 
 const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   const [formData, setFormData] = useState({
     meetingDate: '',
-    startTime: '',
-    endTime: '',
+    startTime: '17:30',
+    endTime: '19:30',
     meetingTheme: '',
     meetingLocation: '',
     category: 'Regular'
   });
   const [loading, setLoading] = useState(false);
+  const [existingMeetings, setExistingMeetings] = useState([]);
 
+  const findNextAvailableSaturday = (startFrom, meetings) => {
+    let checkDate = startFrom ? new Date(startFrom) : new Date();
+
+    const dayOfWeek = checkDate.getDay(); // 0 = Sun, 6 = Sat
+    let daysUntilSaturday = (6 - dayOfWeek + 7) % 7;
+    checkDate.setDate(checkDate.getDate() + daysUntilSaturday);
+
+    for (let i = 0; i < 52; i++) {
+      const dateStr = checkDate.toISOString().split('T')[0]; // candidate Saturday
+
+      const hasMeeting = (meetings || []).some(m => {
+        if (!m || !m.meetingDate) return false;
+        const dbDateStr = m.meetingDate.split('T')[0];
+        return dbDateStr === dateStr;
+      });
+
+      if (!hasMeeting) {
+        return dateStr; 
+      }
+
+      checkDate.setDate(checkDate.getDate() + 7);
+    }
+
+    return checkDate.toISOString().split('T')[0]; // fallback
+  };
+
+  useEffect(() => {
+    const fetchMeetings = async () => {
+      try {
+        const response = await getAllMeetings();
+        const meetings = response.data || [];
+        setExistingMeetings(meetings);
+
+        if (!editingMeeting) {
+          const nextAvailable = findNextAvailableSaturday(new Date(), meetings);
+          setFormData(prev => ({
+            ...prev,
+            meetingDate: nextAvailable
+          }));
+        }
+      } catch (error) {
+        console.error('Error fetching meetings:', error);
+
+        // fallback: just pick the next Saturday
+        if (!editingMeeting) {
+          const today = new Date();
+          const dayOfWeek = today.getDay();
+          const daysUntilSaturday = (6 - dayOfWeek + 7) % 7;
+          const nextSaturday = new Date(today);
+          nextSaturday.setDate(today.getDate() + daysUntilSaturday);
+
+          setFormData(prev => ({
+            ...prev,
+            meetingDate: nextSaturday.toISOString().split('T')[0]
+          }));
+        }
+      }
+    };
+
+    if (!editingMeeting && show) {
+      fetchMeetings();
+    }
+  }, [editingMeeting, show]);
+
+  // Load data when editing
   useEffect(() => {
     if (editingMeeting) {
       setFormData({
-        meetingDate: editingMeeting.meetingDate ? editingMeeting.meetingDate.split('T')[0] : '',
+        meetingDate: editingMeeting.meetingDate
+          ? editingMeeting.meetingDate.split('T')[0]
+          : '',
         startTime: editingMeeting.startTime || '',
         endTime: editingMeeting.endTime || '',
         meetingTheme: editingMeeting.meetingTheme || '',
         meetingLocation: editingMeeting.meetingLocation || '',
         category: editingMeeting.category || 'Regular'
       });
-    } else {
-      setFormData({
-        meetingDate: '',
-        startTime: '',
-        endTime: '',
-        meetingTheme: '',
-        meetingLocation: '',
-        category: 'Regular'
-      });
     }
-  }, [editingMeeting, show]);
+  }, [editingMeeting]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -45,9 +105,9 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!formData.meetingDate || !formData.startTime || !formData.endTime || 
-        !formData.meetingTheme || !formData.meetingLocation) {
+
+    if (!formData.meetingDate || !formData.startTime || !formData.endTime ||
+      !formData.meetingTheme || !formData.meetingLocation) {
       Swal.fire({
         icon: 'error',
         title: 'Validation Error',
@@ -97,6 +157,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
                   name="meetingDate"
                   value={formData.meetingDate}
                   onChange={handleChange}
+                  min={new Date().toISOString().split('T')[0]} // prevent past dates
                   required
                 />
               </Form.Group>
@@ -116,7 +177,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
               </Form.Group>
             </Col>
           </Row>
-          
+
           <Row>
             <Col md={6}>
               <Form.Group className="mb-3">
@@ -143,7 +204,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
               </Form.Group>
             </Col>
           </Row>
-          
+
           <Row>
             <Col md={6}>
               <Form.Group className="mb-3">
@@ -171,7 +232,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
               </Form.Group>
             </Col>
           </Row>
-          
+
           <Form.Group className="mb-3">
             <Form.Label>Meeting Theme *</Form.Label>
             <Form.Control
@@ -202,4 +263,4 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   );
 };
 
-export default MeetingForm; 
+export default MeetingForm;

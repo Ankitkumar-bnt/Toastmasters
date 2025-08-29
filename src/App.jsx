@@ -373,63 +373,63 @@ function App({ onLogout }) {
   );
 
   const renderContent = () => {
-    switch (activeTab) {
-      case 'dashboard':
-        return renderDashboard();
-      case 'members':
-        return renderMembers();
-      case 'add-member':
-        return renderAddMember();
-      case 'meetings':
-        return renderMeetings();
-      case 'meeting-details':
-        return renderMeetingDetails();
-      case 'assign-role':
-        return renderAssignRole();
-      default:
-        return (
-          <Card className="shadow-sm">
-            <Card.Body className="text-center py-5">
-              <h4>Coming Soon</h4>
-              <p className="text-muted">This feature is under development.</p>
-            </Card.Body>
-          </Card>
-        );
-    }
+    return (
+      <>
+        {(() => {
+          switch (activeTab) {
+            case 'dashboard':
+              return renderDashboard();
+            case 'add-member':
+              return renderAddMember();
+            case 'members':
+              return renderMembers();
+            case 'meetings':
+              return renderMeetings();
+            case 'meeting-details':
+              return renderMeetingDetails();
+            case 'assign-role':
+              return renderAssignRole();
+            default:
+              return (
+                <Card className="shadow-sm">
+                  <Card.Body className="text-center py-5">
+                    <h4>Coming Soon</h4>
+                    <p className="text-muted">This feature is under development.</p>
+                  </Card.Body>
+                </Card>
+              );
+          }
+        })()}
+
+        <MemberForm
+          show={showMemberForm}
+          onHide={() => setShowMemberForm(false)}
+          onSubmit={handleSubmitMember}
+          editingUser={editingUser}
+          title={editingUser ? 'Edit Member' : 'Add New Member'}
+        />
+
+        <MeetingForm
+          show={showMeetingForm}
+          onHide={() => setShowMeetingForm(false)}
+          onSubmit={handleSubmitMeeting}
+          editingMeeting={editingMeeting}
+          title={editingMeeting ? 'Edit Meeting' : 'Add New Meeting'}
+        />
+      </>
+    );
   };
 
   return (
     <div className="min-vh-100 bg-light">
-      <AdminHeader onLogout={handleLogout} />
-      
+      <AdminHeader onLogout={onLogout} />
       <div className="d-flex">
         <AdminSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-        
-        <div className="flex-grow-1">
-          <Container fluid className="p-4">
-            {renderContent()}
-          </Container>
-        </div>
+        <main className="flex-grow-1 p-4" style={{ marginLeft: '250px', width: 'calc(100% - 250px)' }}>
+          {renderContent()}
+        </main>
       </div>
-
-      <MemberForm
-        show={showMemberForm}
-        onHide={() => setShowMemberForm(false)}
-        onSubmit={handleSubmitMember}
-        editingUser={editingUser}
-        title={editingUser ? 'Edit Member' : 'Add New Member'}
-      />
-
-      <MeetingForm
-        show={showMeetingForm}
-        onHide={() => setShowMeetingForm(false)}
-        onSubmit={handleSubmitMeeting}
-        editingMeeting={editingMeeting}
-        title={editingMeeting ? 'Edit Meeting' : 'Add New Meeting'}
-      />
-
     </div>
-    
   );
 }
 
