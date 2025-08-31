@@ -42,9 +42,16 @@ public class Constant {
 	// Member Availability
 	public static final String AVAILABILITY_MARKED_SUCCESS = "Availability marked successfully";
 
+	// Meeting Assigned Role
+	public static final String ROLES_ASSIGNED_TO_MEETING = "Roles assigned to meeting";
+	public static final String FOUND_ALL_MEETING_ROLES = "Found all roles for meeting";
+
 	// Constant Words
 	public static final Integer DELETE_STATUS_ACTIVE = 1;
 	public static final Integer DELETE_STATUS_DELETED = 0;
+
+	// Extras
+	public static final String EMPTY_LIST = "List is empty";
 
 
 

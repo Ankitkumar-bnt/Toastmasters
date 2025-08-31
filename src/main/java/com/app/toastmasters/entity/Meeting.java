@@ -21,7 +21,7 @@ public class Meeting {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int meetingId;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private LocalDate meetingDate;
 
     @Column(nullable = false)

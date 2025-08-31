@@ -143,4 +143,15 @@ public class MeetingServiceImpl implements MeetingService {
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 
+    @Override
+    public ResponseEntity<ResponseMessage<MeetingResponseDTO>> getMeetingByTheme(String meetingTheme) {
+        Optional<Meeting> meetingByTheme = meetingRepo.findByMeetingTheme(meetingTheme);
+        if (meetingByTheme.isEmpty()) {
+            throw new MeetingNotFoundException(Constant.MEETING_NOT_FOUND);
+        }
+        ResponseMessage<MeetingResponseDTO> responseMessage =
+                new ResponseMessage<>(HttpStatus.OK, Constant.MEETING_FOUND, mapper.toDTO(meetingByTheme.get()));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
 }

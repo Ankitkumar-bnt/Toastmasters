@@ -18,4 +18,6 @@ public interface MeetingService {
     ResponseEntity<ResponseMessage<MeetingResponseDTO>> updateMeeting(Integer meetingId, MeetingRequestDTO meetingRequestDTO);
 
     ResponseEntity<ResponseMessage<MeetingResponseDTO>> deleteMeeting(Integer meetingId);
+
+    ResponseEntity<ResponseMessage<MeetingResponseDTO>> getMeetingByTheme(String meetingTheme);
 }

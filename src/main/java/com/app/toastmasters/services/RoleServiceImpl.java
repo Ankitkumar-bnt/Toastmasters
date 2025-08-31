@@ -94,7 +94,8 @@ public class RoleServiceImpl implements RoleService {
         if (roleById.isEmpty()) {
             throw new RoleNotFoundException(Constant.ROLE_NOT_FOUND);
         }
-
+        roleRepo.deleteById(roleId);
+        
         if (roleRepo.findById(roleId).isPresent()) {
             throw new RoleNotFoundException(Constant.ROLE_DELETE_FAILS);
         }

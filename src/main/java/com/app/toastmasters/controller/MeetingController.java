@@ -39,6 +39,12 @@ public class MeetingController {
         return meetingService.getMeetingById(meetingId);
     }
 
+    @GetMapping("/getMeetingByTheme/{meetingTheme}")
+    public ResponseEntity<ResponseMessage<MeetingResponseDTO>> getMeetingByTheme(
+            @PathVariable String meetingTheme) {
+        return meetingService.getMeetingByTheme(meetingTheme);
+    }
+
     @PatchMapping("/updateMeeting/{meetingId}")
     public ResponseEntity<ResponseMessage<MeetingResponseDTO>> updateMeeting(
             @PathVariable Integer meetingId,
