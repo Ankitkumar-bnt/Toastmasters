@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Form, Button, Row, Col, Badge, Alert, Spinner, Table, Modal, Pagination, InputGroup } from 'react-bootstrap';
+import { Card, Form, Button, Row, Col, Badge, Alert, Spinner, Table, Modal, Pagination, InputGroup, Dropdown } from 'react-bootstrap';
 import { Calendar, Clock, MapPin, Users, Settings, Plus, Edit, Trash2, Search } from 'lucide-react';
 import Swal from 'sweetalert2';
-import { getAllMeetings } from '../../api/MeetingApi';
+import { getAllMeetings, getAllUpcomingMeetings } from '../../api/MeetingApi';
 import { getAllMemberAvailability } from '../../api/AvailableMembersApi';
 import { getAllMembers } from '../../api/UserApi';
 import { getMemberPreferredRoles, addMemberPreferredRole } from '../../api/PreferredRoleApi';
 import { getMemberAssignedRole, addMemberAssignedRole } from '../../api/AssignedRoleApi';
 import { getAllRoles, addRole, updateRole, deleteRole } from '../../api/RoleApi';
+import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
 
 const AssignRole = () => {
   const [meetings, setMeetings] = useState([]);
@@ -18,6 +19,8 @@ const AssignRole = () => {
   const [memberRoles, setMemberRoles] = useState({});
   const [assignedRoles, setAssignedRoles] = useState({});
   const [availableRoles, setAvailableRoles] = useState([]);
+  const [meetingSpecificRoles, setMeetingSpecificRoles] = useState([]);
+  const [availableRoleCounts, setAvailableRoleCounts] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -93,7 +96,7 @@ const AssignRole = () => {
         loadAvailableMembers(nextMeeting.meetingId);
       }
     }
-  }, [meetings, selectedMeetingId]);
+  }, [meetings]);
 
   const loadUpcomingMeetings = async () => {
     try {
@@ -200,6 +203,39 @@ const AssignRole = () => {
     }
   };
 
+  const loadMeetingSpecificRoles = async (meetingId) => {
+    try {
+      const response = await getAllMeetingRoleCombineByMeeting(meetingId);
+      // Handle ResponseMessage structure
+      const rolesData = response.data?.data || response.data || [];
+      setMeetingSpecificRoles(rolesData);
+      
+      // Initialize available role counts and subtract already assigned roles
+      const roleCounts = {};
+      rolesData.forEach(role => {
+        roleCounts[role.roleName] = role.roleCount || 1;
+      });
+      
+      // Subtract already assigned roles from available counts
+      Object.values(assignedRoles).forEach(memberRoles => {
+        memberRoles.forEach(roleName => {
+          if (roleCounts[roleName] > 0) {
+            roleCounts[roleName] -= 1;
+          }
+        });
+      });
+      
+      setAvailableRoleCounts(roleCounts);
+      
+      return rolesData;
+    } catch (err) {
+      console.error('Error loading meeting-specific roles:', err);
+      setMeetingSpecificRoles([]);
+      setAvailableRoleCounts({});
+      return [];
+    }
+  };
+
   const loadAvailableMembers = async (meetingId) => {
     try {
       setLoading(true);
@@ -219,6 +255,9 @@ const AssignRole = () => {
 
       console.log('Available members for meeting:', availableForMeeting);
       setAvailableMembers(availableForMeeting);
+      
+      // Load meeting-specific roles
+      await loadMeetingSpecificRoles(meetingId);
       
       // Load preferred and assigned roles for each available member
       await loadMemberRoles(availableForMeeting, meetingId);
@@ -257,26 +296,32 @@ const AssignRole = () => {
     setAssignedRoles(assigned);
   };
 
+  const handleMeetingChange = async (meetingId) => {
+    const meeting = meetings.find(m => m.meetingId === parseInt(meetingId));
+    setSelectedMeeting(meeting);
+    setSelectedMeetingId(meetingId);
+    
+    if (meetingId) {
+      await Promise.all([
+        loadAvailableMembers(meetingId),
+        loadMeetingSpecificRoles(meetingId)
+      ]);
+      // Reset assigned roles when meeting changes
+      setAssignedRoles({});
+    }
+  };
+
   const handleMeetingSelect = (e) => {
     const meetingId = e.target.value;
     if (meetingId) {
-      const meeting = meetings.find(m => String(m.meetingId) === String(meetingId));
-      if (meeting) {
-        setSelectedMeeting(meeting);
-        setSelectedMeetingId(meetingId);
-        // Clear previous data
-        setAvailableMembers([]);
-        setMemberRoles({});
-        setAssignedRoles({});
-        // Load new data
-        loadAvailableMembers(meetingId);
-      }
+      handleMeetingChange(meetingId);
     } else {
       setSelectedMeeting(null);
       setSelectedMeetingId('');
       setAvailableMembers([]);
       setMemberRoles({});
       setAssignedRoles({});
+      setAvailableRoleCounts({});
     }
   };
 
@@ -307,15 +352,20 @@ const AssignRole = () => {
         [userId]: [...selectedMemberRoles]
       }));
 
-      // Update API
-      for (const role of allRolesData) {
-        const roleName = role.roleName || role.name;
-        const shouldHaveRole = selectedMemberRoles.includes(roleName);
-        const currentlyHasRole = (assignedRoles[userId] || []).includes(roleName);
+      // Update API - send all selected roles at once
+      if (selectedMemberRoles.length > 0) {
+        await addMemberAssignedRole(userId, selectedMeetingId, selectedMemberRoles);
         
-        if (shouldHaveRole !== currentlyHasRole) {
-          await addMemberAssignedRole(selectedMeetingId, userId, roleName, !shouldHaveRole);
-        }
+        // Update available role counts
+        setAvailableRoleCounts(prev => {
+          const updated = { ...prev };
+          selectedMemberRoles.forEach(roleName => {
+            if (updated[roleName] > 0) {
+              updated[roleName] -= 1;
+            }
+          });
+          return updated;
+        });
       }
       
       setSuccess('Roles updated successfully');
@@ -512,18 +562,62 @@ const AssignRole = () => {
         <Card.Body>
           <Form.Group className="mb-3">
             <Form.Label>Meeting</Form.Label>
-            <Form.Select
-              value={selectedMeetingId}
-              onChange={handleMeetingSelect}
-              disabled={loading}
-            >
-              <option value="">Select a meeting...</option>
-              {meetings.map((meeting) => (
-                <option key={meeting.meetingId} value={meeting.meetingId}>
-                  {formatDate(meeting.meetingDate)} - {meeting.meetingTheme || 'No Theme'}
-                </option>
-              ))}
-            </Form.Select>
+            <Dropdown drop="down">
+              <Dropdown.Toggle 
+                variant="outline-secondary" 
+                id="meeting-dropdown"
+                className="w-100 text-start d-flex justify-content-between align-items-center"
+                disabled={loading}
+              >
+                {selectedMeeting 
+                  ? `${formatDate(selectedMeeting.meetingDate)} - ${selectedMeeting.meetingTheme || 'No Theme'}`
+                  : 'Select a meeting...'
+                }
+              </Dropdown.Toggle>
+
+              <Dropdown.Menu 
+                className="w-100"
+                style={{ 
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  width: '100%',
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                }}
+              >
+                {meetings.length === 0 ? (
+                  <Dropdown.Item disabled>No meetings available</Dropdown.Item>
+                ) : (
+                  meetings.map((meeting) => (
+                    <Dropdown.Item
+                      key={meeting.meetingId}
+                      onClick={() => {
+                        setSelectedMeeting(meeting);
+                        setSelectedMeetingId(meeting.meetingId);
+                        setAvailableMembers([]);
+                        setMemberRoles({});
+                        setAssignedRoles({});
+                        loadAvailableMembers(meeting.meetingId);
+                      }}
+                      active={selectedMeetingId === meeting.meetingId}
+                    >
+                      <div>
+                        <strong>{formatDate(meeting.meetingDate)}</strong>
+                        <br />
+                        <small className="text-muted">{meeting.meetingTheme || 'No Theme'}</small>
+                      </div>
+                    </Dropdown.Item>
+                  ))
+                )}
+              </Dropdown.Menu>
+            </Dropdown>
+            {meetings.length > 10 && (
+              <Form.Text className="text-muted">
+                Showing {meetings.length} meetings. Use search above to filter results.
+              </Form.Text>
+            )}
           </Form.Group>
         </Card.Body>
       </Card>
@@ -655,23 +749,34 @@ const AssignRole = () => {
               <p className="text-muted">Select roles to assign:</p>
               
               <div className="d-flex flex-wrap gap-2 mb-3">
-                {allRolesData.length > 0 ? (
-                  allRolesData.map((role) => {
-                    const roleName = role.roleName || role.name;
-                    const isSelected = selectedMemberRoles.includes(roleName);
-                    return (
-                      <Button
-                        key={roleName}
-                        variant={isSelected ? 'primary' : 'outline-secondary'}
-                        className="me-2 mb-2"
-                        onClick={() => handleRoleSelection(roleName, isSelected)}
-                      >
-                        {roleName}
-                      </Button>
-                    );
-                  })
+                {meetingSpecificRoles.length > 0 ? (
+                  meetingSpecificRoles
+                    .filter(role => {
+                      const availableCount = availableRoleCounts[role.roleName] || 0;
+                      return availableCount > 0;
+                    })
+                    .map((role) => {
+                      const roleName = role.roleName;
+                      const isSelected = selectedMemberRoles.includes(roleName);
+                      const availableCount = availableRoleCounts[role.roleName] || 0;
+                      return (
+                        <Button
+                          key={`${role.roleId}-${roleName}`}
+                          variant={isSelected ? 'primary' : 'outline-secondary'}
+                          className="me-2 mb-2"
+                          onClick={() => handleRoleSelection(roleName, isSelected)}
+                        >
+                          {roleName}
+                          {availableCount > 1 && (
+                            <Badge bg="light" text="dark" className="ms-1">
+                              {availableCount}
+                            </Badge>
+                          )}
+                        </Button>
+                      );
+                    })
                 ) : (
-                  <p className="text-muted">No roles available</p>
+                  <p className="text-muted">No roles available for this meeting</p>
                 )}
               </div>
             </>

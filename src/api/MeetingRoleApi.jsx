@@ -19,3 +19,7 @@ export const getAllMeetingRoleByMeetingId = async (meetingId) => {
 export const getAllMeetingRoleByMeetingTheme = async (meetingTheme) => {
   return axios.get(`${BASE_URL}/getAllMeetingRoleByMeetingTheme/${meetingTheme}`);
 };
+
+export const getAllMeetingRoleCombineByMeeting = async (meetingId) => {
+  return axios.get(`${BASE_URL}/getAllMeetingRoleCombineByMeeting/${meetingId}`);
+};

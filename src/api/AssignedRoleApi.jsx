@@ -7,7 +7,12 @@ export const addMemberAssignedRole = async (userId, meetingId, assignedRoleList)
   try {
     const response = await axios.post(
       `${BASE_URL}/addMemberAssignedRole/${userId}/${meetingId}`,
-      assignedRoleList
+      assignedRoleList,
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
     );
     return response.data;
   } catch (error) {

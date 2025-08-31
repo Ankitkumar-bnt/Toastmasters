@@ -6,8 +6,13 @@ export const addMeeting = async (meetingData) => {
   return axios.post(`${API_BASE_URL}/addMeeting`, meetingData);
 };
 
-export const getAllMeetings = async () => {
-  return axios.get(`${API_BASE_URL}/getAllMeetings`);
+export const getAllMeetings = async (limit = null) => {
+  const url = limit ? `${API_BASE_URL}/getAllMeetings?limit=${limit}` : `${API_BASE_URL}/getAllMeetings`;
+  return axios.get(url);
+};
+
+export const getAllUpcomingMeetings = async () => {
+  return axios.get(`${API_BASE_URL}/getAllMeetings?upcoming=true&limit=1000`);
 };
 
 export const getMeetingById = async (meetingId) => {
