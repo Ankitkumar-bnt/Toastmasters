@@ -22,10 +22,15 @@ export const deleteMeeting = async (meetingId) => {
   return axios.delete(`${API_BASE_URL}/deleteMeeting/${meetingId}`);
 };
 
+export const getMeetingByTheme = async (meetingTheme) => {
+  const encodedTheme = encodeURIComponent(meetingTheme);
+  return axios.get(`${API_BASE_URL}/getMeetingByTheme/${encodedTheme}`);
+};
+
 export const setMemberAvailability = async (meetingId, memberId, availability) => {
   // Placeholder: adjust path/body when backend endpoint is provided
   return axios.post(`${API_BASE_URL}/${meetingId}/availability`, {
     memberId,
     availability
   });
-}; 
+};

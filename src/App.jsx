@@ -3,6 +3,7 @@ import { Container, Row, Col, Card, Button } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { getAllMembers, addMember, updateMember, deleteUserById } from './api/UserApi';
 import { getAllMeetings, addMeeting, updateMeeting, deleteMeeting } from './api/MeetingApi';
+import { addMeetingRoles } from './api/MeetingRoleApi';
 import AdminHeader from './components/admin/AdminHeader';
 import AdminSidebar from './components/admin/AdminSidebar';
 import MemberForm from './components/admin/members/MemberForm';
@@ -167,8 +168,38 @@ function App({ onLogout }) {
 
   const handleSubmitMeeting = async (meetingData) => {
     try {
+      // Check if this is just a refresh request from MeetingForm
+      if (meetingData && meetingData.refresh) {
+        await loadMeetings();
+        return;
+      }
+
+      // Build roles map from MeetingForm payload (for editing meetings)
+      const entries = Object.entries(meetingData.selectedRoles || {});
+      const rolesMap = Object.fromEntries(
+        entries
+          .filter(([, v]) => v && v.selected && Number(v.count) >= 1)
+          .map(([rid, v]) => [rid, Number(v.count)])
+      );
+
       if (editingMeeting) {
+        // Update meeting first
         await updateMeeting(editingMeeting.meetingId, meetingData);
+        // Then persist roles for this meeting
+        const meetingId = editingMeeting.meetingId ?? editingMeeting.id;
+        if (meetingId && Object.keys(rolesMap).length > 0) {
+          try {
+            await addMeetingRoles(meetingId, rolesMap);
+          } catch (e) {
+            console.error('Failed to save meeting roles (update):', e);
+            // Non-blocking warning; meeting is updated already
+            Swal.fire({
+              icon: 'warning',
+              title: 'Roles Not Saved',
+              text: 'Meeting updated, but roles could not be saved. Please try again from Add Roles.',
+            });
+          }
+        }
         Swal.fire({
           icon: 'success',
           title: 'Success!',
@@ -176,22 +207,9 @@ function App({ onLogout }) {
           timer: 2000,
           showConfirmButton: false,
         });
-      } else {
-        // Add deleteStatus: 1 when creating a new meeting
-        const meetingWithDeleteStatus = {
-          ...meetingData,
-          deleteStatus: 1
-        };
-        await addMeeting(meetingWithDeleteStatus);
-        Swal.fire({
-          icon: 'success',
-          title: 'Success!',
-          text: 'Meeting added successfully.',
-          timer: 2000,
-          showConfirmButton: false,
-        });
+        await loadMeetings();
       }
-      loadMeetings();
+      // Note: New meeting creation is now handled directly in MeetingForm
     } catch (err) {
       throw err; // Let the form handle the error
     }

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
+import { Modal, Form, Button, Row, Col, Table } from 'react-bootstrap';
 import Swal from 'sweetalert2';
-import { getAllMeetings } from '../../api/MeetingApi';
+import { getAllMeetings, addMeeting, getMeetingByTheme, updateMeeting } from '../../api/MeetingApi';
+import { getAllRoles } from '../../api/RoleApi';
+import { getAllMeetingRoleByMeetingId, addMeetingRoles } from '../../api/MeetingRoleApi';
 
 const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   const [formData, setFormData] = useState({
@@ -14,6 +16,10 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   });
   const [loading, setLoading] = useState(false);
   const [existingMeetings, setExistingMeetings] = useState([]);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [selectedRoles, setSelectedRoles] = useState({});
+  const [roleLoading, setRoleLoading] = useState(false);
 
   const findNextAvailableSaturday = (startFrom, meetings) => {
     let checkDate = startFrom ? new Date(startFrom) : new Date();
@@ -45,11 +51,12 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
     const fetchMeetings = async () => {
       try {
         const response = await getAllMeetings();
-        const meetings = response.data || [];
-        setExistingMeetings(meetings);
+        const meetings = response?.data?.data || response?.data || [];
+        const meetingsArray = Array.isArray(meetings) ? meetings : [];
+        setExistingMeetings(meetingsArray);
 
         if (!editingMeeting) {
-          const nextAvailable = findNextAvailableSaturday(new Date(), meetings);
+          const nextAvailable = findNextAvailableSaturday(new Date(), meetingsArray);
           setFormData(prev => ({
             ...prev,
             meetingDate: nextAvailable
@@ -92,8 +99,48 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
         meetingLocation: editingMeeting.meetingLocation || '',
         category: editingMeeting.category || 'Regular'
       });
+
+      // Preload roles for this meeting when editing
+      const loadMeetingRoles = async () => {
+        try {
+          const mid = editingMeeting.meetingId ?? editingMeeting.id;
+          if (!mid) return;
+          const res = await getAllMeetingRoleByMeetingId(mid);
+          const items = res?.data?.data || res?.data || [];
+          console.log('Meeting roles from server (edit mode):', items);
+          
+          if (Array.isArray(items)) {
+            const mapped = {};
+            for (const mr of items) {
+              // Try different possible field names for role ID
+              const rid = mr.roleId ?? mr.role?.roleId ?? mr.role?.id ?? mr.id;
+              const countVal = mr.roleCount ?? mr.count ?? mr.role_count ?? 1;
+              const roleName = mr.roleName ?? mr.role?.roleName;
+              
+              console.log('Processing role (edit mode):', { rid, countVal, roleName, fullObject: mr });
+              
+              if (rid != null) {
+                mapped[rid] = { selected: true, count: String(countVal) };
+              } else if (roleName) {
+                // If we have roleName but no roleId, we'll need to match it later when availableRoles is loaded
+                mapped[`roleName_${roleName}`] = { selected: true, count: String(countVal), roleName };
+              }
+            }
+            console.log('Mapped selected roles (edit mode):', mapped);
+            setSelectedRoles(mapped);
+          }
+        } catch (e) {
+          console.error('Failed to load meeting roles:', e);
+        }
+      };
+      loadMeetingRoles();
+    } else {
+      // Clear selected roles for new meetings
+      setSelectedRoles({});
     }
   }, [editingMeeting]);
+
+  // Removed auto-open of roles modal; it opens only on Add Roles button
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -101,6 +148,65 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
       ...prev,
       [name]: value
     }));
+  };
+
+  const fetchRoles = async () => {
+    try {
+      setRoleLoading(true);
+      const response = await getAllRoles();
+      const roles = response?.data?.data || response?.data || [];
+      setAvailableRoles(Array.isArray(roles) ? roles : []);
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to fetch roles. Please try again.',
+      });
+    } finally {
+      setRoleLoading(false);
+    }
+  };
+
+  const handleAddRoles = async () => {
+    // Ensure roles list is present
+    if (availableRoles.length === 0) {
+      await fetchRoles();
+    }
+
+    setShowRoleModal(true);
+  };
+
+  const handleRoleSelection = (roleId, isSelected) => {
+    setSelectedRoles(prev => {
+      const updated = { ...prev };
+      if (isSelected) {
+        updated[roleId] = { selected: true, count: '1' };
+      } else {
+        delete updated[roleId];
+      }
+      return updated;
+    });
+  };
+
+  const handleRoleCountChange = (roleId, count) => {
+    // allow empty string during typing; normalize later on submit
+    const next = count === '' ? '' : count;
+    setSelectedRoles(prev => ({
+      ...prev,
+      [roleId]: { ...prev[roleId], count: next }
+    }));
+  };
+
+  const handleRoleModalSave = () => {
+    setShowRoleModal(false);
+    Swal.fire({
+      icon: 'success',
+      title: 'Roles Added',
+      text: `${Object.keys(selectedRoles).length} roles selected for this meeting.`,
+      timer: 2000,
+      showConfirmButton: false
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -125,16 +231,186 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
       return;
     }
 
+    // Require at least one role when creating a new meeting
+    if (!editingMeeting && Object.keys(selectedRoles).length === 0) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Roles Required',
+        text: 'Please click "Add Roles" and select at least one role for this meeting.',
+      });
+      return;
+    }
+
     try {
       setLoading(true);
-      await onSubmit(formData);
+
+      if (editingMeeting) {
+        // For editing meeting, update meeting first then update roles
+        console.log('Editing meeting - Step 1: Updating meeting...');
+        await updateMeeting(editingMeeting.meetingId, formData);
+        
+        // Step 2: Build rolesMap with roleName as key and count as value
+        const rolesMap = {};
+        for (const [roleId, roleInfo] of Object.entries(selectedRoles)) {
+          if (roleInfo.selected) {
+            // Find the role name from availableRoles
+            const role = availableRoles.find(r => (r.roleId || r.id) === parseInt(roleId));
+            if (role && role.roleName) {
+              const count = parseInt(roleInfo.count, 10);
+              const safeCount = Number.isFinite(count) && count >= 1 ? count : 1;
+              rolesMap[role.roleName] = safeCount;
+            }
+          }
+        }
+        
+        // Step 3: Update meeting roles using addMeetingRoles API
+        if (Object.keys(rolesMap).length > 0) {
+          console.log('Editing meeting - Step 2: Updating meeting roles...');
+          console.log('Meeting ID:', editingMeeting.meetingId);
+          console.log('Roles map (roleName → count):', rolesMap);
+          await addMeetingRoles(editingMeeting.meetingId, rolesMap);
+        }
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Meeting and roles updated successfully.',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      } else {
+        // For new meeting, implement the three-step API sequence
+        
+        // Step 1: Call addMeeting API and capture response
+        const meetingPayload = {
+          ...formData,
+          deleteStatus: 1
+        };
+        
+        console.log('Step 1: Creating meeting...');
+        const addMeetingResponse = await addMeeting(meetingPayload);
+        console.log('Add meeting response:', addMeetingResponse);
+        
+        // Step 2: Try to get meeting ID from addMeeting response first
+        let newMeetingId = null;
+        const responseData = addMeetingResponse?.data?.data || addMeetingResponse?.data || addMeetingResponse;
+        
+        if (responseData) {
+          newMeetingId = responseData.meetingId || 
+                        responseData.id || 
+                        responseData.meeting?.meetingId || 
+                        responseData.meeting?.id;
+        }
+        
+        console.log('Meeting ID from addMeeting response:', newMeetingId);
+        
+        // Fallback: If no ID from response, try getMeetingByTheme
+        if (!newMeetingId) {
+          console.log('Fallback: Using getMeetingByTheme...');
+          try {
+            const themeResponse = await getMeetingByTheme(formData.meetingTheme);
+            const meetings = themeResponse?.data?.data || themeResponse?.data || [];
+            
+            if (Array.isArray(meetings) && meetings.length > 0) {
+              const sortedMeetings = meetings.sort((a, b) => {
+                const dateA = new Date(a.meetingDate || a.createdAt);
+                const dateB = new Date(b.meetingDate || b.createdAt);
+                return dateB.getTime() - dateA.getTime();
+              });
+              newMeetingId = sortedMeetings[0].meetingId || sortedMeetings[0].id;
+            }
+          } catch (themeError) {
+            console.warn('getMeetingByTheme failed:', themeError);
+          }
+        }
+        
+        // Final fallback: Use getAllMeetings
+        if (!newMeetingId) {
+          console.log('Final fallback: Using getAllMeetings...');
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for DB update
+          
+          const allMeetingsResponse = await getAllMeetings();
+          const allMeetings = allMeetingsResponse?.data?.data || allMeetingsResponse?.data || [];
+          
+          if (Array.isArray(allMeetings)) {
+            const recentMeeting = allMeetings
+              .filter(meeting => 
+                meeting.meetingTheme === formData.meetingTheme &&
+                meeting.meetingDate === formData.meetingDate &&
+                meeting.meetingLocation === formData.meetingLocation
+              )
+              .sort((a, b) => {
+                const dateA = new Date(a.meetingDate || a.createdAt);
+                const dateB = new Date(b.meetingDate || b.createdAt);
+                return dateB.getTime() - dateA.getTime();
+              })[0];
+            
+            if (recentMeeting) {
+              newMeetingId = recentMeeting.meetingId || recentMeeting.id;
+            }
+          }
+        }
+        
+        if (!newMeetingId) {
+          throw new Error('Could not retrieve the newly created meeting ID using any method');
+        }
+        
+        console.log('Final meeting ID:', newMeetingId);
+        
+        // Step 3: Build rolesMap with roleName as key and count as value
+        const rolesMap = {};
+        for (const [roleId, roleInfo] of Object.entries(selectedRoles)) {
+          if (roleInfo.selected) {
+            // Find the role name from availableRoles
+            const role = availableRoles.find(r => (r.roleId || r.id) === parseInt(roleId));
+            if (role && role.roleName) {
+              const count = parseInt(roleInfo.count, 10);
+              const safeCount = Number.isFinite(count) && count >= 1 ? count : 1;
+              rolesMap[role.roleName] = safeCount;
+            }
+          }
+        }
+        
+        // Step 4: Call addMeetingRoles API with roleName → count format
+        if (Object.keys(rolesMap).length > 0) {
+          console.log('Step 4: Adding meeting roles...');
+          console.log('Meeting ID:', newMeetingId);
+          console.log('Roles map (roleName → count):', rolesMap);
+          await addMeetingRoles(newMeetingId, rolesMap);
+        }
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Meeting and roles added successfully.',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      }
+      
+      // Refresh the meetings list before closing the modal
+      try {
+        // Force refresh the meetings list by calling getAllMeetings
+        const refreshResponse = await getAllMeetings();
+        console.log('Meetings list refreshed after creation');
+        
+        // Also call the parent's onSubmit if available (for additional refresh logic)
+        if (onSubmit && typeof onSubmit === 'function') {
+          await onSubmit({ refresh: true });
+        }
+      } catch (err) {
+        console.warn('Failed to refresh meetings list:', err);
+      }
+      
       onHide();
+      setSelectedRoles({});
+      
     } catch (err) {
       console.error('Error submitting meeting:', err);
       Swal.fire({
         icon: 'error',
         title: 'Error',
-        text: err.response?.data?.message || 'Failed to save meeting. Please try again.',
+        text: err.response?.data?.message || err.message || 'Failed to save meeting. Please try again.',
       });
     } finally {
       setLoading(false);
@@ -205,7 +481,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
             </Col>
           </Row>
 
-          <Row>
+          <Row className="align-items-end">
             <Col md={6}>
               <Form.Group className="mb-3">
                 <Form.Label>Meeting Type *</Form.Label>
@@ -231,6 +507,16 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
                 )}
               </Form.Group>
             </Col>
+            <Col md={4} className="text-end">
+              <Button
+                variant="info"
+                onClick={handleAddRoles}
+                disabled={loading}
+                className="mb-3"
+              >
+                Add Roles ({Object.keys(selectedRoles).length})
+              </Button>
+            </Col>
           </Row>
 
           <Form.Group className="mb-3">
@@ -251,14 +537,108 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
           </Form.Group>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={onHide} disabled={loading}>
-            Cancel
-          </Button>
-          <Button variant="primary" type="submit" disabled={loading}>
-            {loading ? 'Saving...' : (editingMeeting ? 'Update Meeting' : 'Add Meeting')}
-          </Button>
+          <div className="d-flex justify-content-end w-100">
+            <Button variant="secondary" onClick={onHide} disabled={loading} className="me-2">
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" disabled={loading}>
+              {loading ? 'Saving...' : (editingMeeting ? 'Update Meeting' : 'Add Meeting')}
+            </Button>
+          </div>
         </Modal.Footer>
       </Form>
+
+      {/* Role Selection Modal */}
+      <Modal 
+        show={showRoleModal} 
+        onHide={() => setShowRoleModal(false)} 
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Add Roles to Meeting</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {roleLoading ? (
+            <div className="text-center py-4">
+              <div className="spinner-border" role="status">
+                <span className="visually-hidden">Loading roles...</span>
+              </div>
+              <p className="mt-2">Loading roles...</p>
+            </div>
+          ) : (
+            <>
+              {availableRoles.length > 0 ? (
+                <Table striped bordered hover>
+                  <thead>
+                    <tr>
+                      <th width="50">Select</th>
+                      <th>Role Name</th>
+                      <th width="100">Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {availableRoles.map((role) => (
+                      <tr key={role.roleId ?? role.id}>
+                        <td className="text-center">
+                          <Form.Check
+                            type="checkbox"
+                            checked={selectedRoles[role.roleId ?? role.id]?.selected || false}
+                            onChange={(e) => handleRoleSelection((role.roleId ?? role.id), e.target.checked)}
+                          />
+                        </td>
+                        <td>
+                          <strong>{role.roleName}</strong>
+                          {role.roleDescription && (
+                            <div className="text-muted small">{role.roleDescription}</div>
+                          )}
+                        </td>
+                        <td>
+                          <Form.Control
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={selectedRoles[role.roleId ?? role.id]?.count ?? ''}
+                            onChange={(e) => handleRoleCountChange((role.roleId ?? role.id), e.target.value)}
+                            disabled={!selectedRoles[role.roleId ?? role.id]?.selected}
+                            size="sm"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-muted">No roles available. Please add roles first.</p>
+                </div>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <div className="d-flex justify-content-between w-100">
+            <div className="text-muted">
+              {Object.keys(selectedRoles).length} role(s) selected
+            </div>
+            <div>
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowRoleModal(false)}
+                className="me-2"
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={handleRoleModalSave}
+                disabled={Object.keys(selectedRoles).length === 0}
+              >
+                Save Roles
+              </Button>
+            </div>
+          </div>
+        </Modal.Footer>
+      </Modal>
     </Modal>
   );
 };

@@ -1,0 +1,21 @@
+import axios from 'axios';
+
+// Controller has no class-level @RequestMapping, so endpoints are at API root
+const BASE_URL = 'http://localhost:8888';
+
+export const addMeetingRoles = async (meetingId, rolesMap) => {
+  // rolesMap should be an object map of { [roleName:string]: number }
+  return axios.post(`${BASE_URL}/addMeetingRoles/${meetingId}`, rolesMap);
+};
+
+export const getAllMeetingRole = async () => {
+  return axios.get(`${BASE_URL}/getAllMeetingRole`);
+};
+
+export const getAllMeetingRoleByMeetingId = async (meetingId) => {
+  return axios.get(`${BASE_URL}/getAllMeetingRoleByMeetingId/${meetingId}`);
+};
+
+export const getAllMeetingRoleByMeetingTheme = async (meetingTheme) => {
+  return axios.get(`${BASE_URL}/getAllMeetingRoleByMeetingTheme/${meetingTheme}`);
+};
