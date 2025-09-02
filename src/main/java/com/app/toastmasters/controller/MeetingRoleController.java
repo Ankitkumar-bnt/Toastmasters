@@ -2,6 +2,11 @@ package com.app.toastmasters.controller;
 
 import com.app.toastmasters.dto.responseDTO.MeetingResponseDTO;
 import com.app.toastmasters.dto.responseDTO.MeetingRoleResponseDTO;
+import com.app.toastmasters.dto.responseDTO.RoleResponseDTO;
+import com.app.toastmasters.entity.Meeting;
+import com.app.toastmasters.entity.MeetingRoleHelper;
+import com.app.toastmasters.entity.MeetingWithRolesDTO;
+import com.app.toastmasters.entity.Roles;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.services.MeetingRoleService;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +38,12 @@ public class MeetingRoleController {
         return meetingRoleService.getAllMeetingRole();
     }
 
+    @GetMapping("/getAllMeetingRoleCombineByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<List<MeetingRoleHelper>>> getAllMeetingRoleCombineByMeeting(@PathVariable int meetingId){
+
+        return meetingRoleService.getAllMeetingRoleCombineByMeeting(meetingId);
+    }
+
     @GetMapping("/getAllMeetingRoleByMeetingId/{meetingId}")
     public ResponseEntity<ResponseMessage<List<MeetingRoleResponseDTO>>> getAllMeetingRoleByMeetingId(
             @PathVariable int meetingId){
@@ -45,5 +56,11 @@ public class MeetingRoleController {
             @PathVariable String meetingTheme){
 
         return meetingRoleService.getAllMeetingRoleByMeetingTheme(meetingTheme);
+    }
+
+    @GetMapping("/getLast3MeetingRoles/{userId}")
+    public ResponseEntity<ResponseMessage<List<MeetingWithRolesDTO>>> getLast3MeetingRoles(
+            @PathVariable int userId){
+        return meetingRoleService.getLast3MeetingRoles(userId);
     }
 }

@@ -1,10 +1,7 @@
 package com.app.toastmasters.entity;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import javax.management.relation.Role;
 
@@ -13,6 +10,7 @@ import javax.management.relation.Role;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString
 @Table( name = "assigned_roles")
 public class AssignedRole {
 

@@ -5,7 +5,7 @@ import java.util.List;
 
 import jakarta.persistence.*;
 import lombok.*;
-
+@ToString
 @Entity
 @Table(name = "users")
 @AllArgsConstructor

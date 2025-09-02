@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Arrays;
 import java.util.List;
 
 @Repository
@@ -22,4 +23,6 @@ public interface AssignedRoleRepository extends JpaRepository<AssignedRole, Inte
 
     @Transactional
     void deleteAllByUserAndMeeting(User userData, Meeting meetingData);
+
+    List<AssignedRole> findByUser(User userData);
 }
