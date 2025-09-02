@@ -1,0 +1,21 @@
+/* Style for clickable table cells */
+.clickable-cell {
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.clickable-cell:hover {
+  background-color: #f8f9fa;
+  text-decoration: none;
+}
+
+/* Ensure buttons and other interactive elements inside clickable cells work properly */
+.clickable-cell .btn {
+  pointer-events: auto;
+}
+
+/* Add some spacing between the badge and text in the date cell */
+.clickable-cell .badge {
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}

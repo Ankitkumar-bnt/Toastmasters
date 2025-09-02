@@ -18,7 +18,7 @@ function MemberDashboard({ onLogout }) {
   const currentUserRaw = localStorage.getItem('tm_current_user');
   const currentUser = currentUserRaw ? JSON.parse(currentUserRaw) : {};
 
-  // Initialize form data when currentUser changes
+  // Initialize form data when component mounts
   useEffect(() => {
     if (currentUser) {
       setFormData({
@@ -31,7 +31,7 @@ function MemberDashboard({ onLogout }) {
         hobbies: currentUser.hobbies || ''
       });
     }
-  }, [currentUser]);
+  }, []); // Empty dependency array to run only on mount
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

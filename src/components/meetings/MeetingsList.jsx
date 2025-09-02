@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Badge, Spinner, Card, Pagination, Dropdown } from 'react-bootstrap';
+import './MeetingsList.css'; // Import the CSS file
 import { Edit, Trash2, Plus, Calendar, Clock, MapPin, FileText, Filter } from 'lucide-react';
 
 const MeetingsList = ({ meetings, loading, onEdit, onDelete, onAdd }) => {
@@ -238,25 +239,55 @@ const MeetingsList = ({ meetings, loading, onEdit, onDelete, onAdd }) => {
             </thead>
             <tbody>
               {currentMeetings.map((meeting) => (
-                <tr key={meeting.meetingId} className="border-bottom" style={{cursor:'pointer'}} onClick={() => onEdit({ ...meeting, __viewOnly: true })}>
-                  <td className="px-3 py-3">
+                <tr key={meeting.meetingId} className="border-bottom">
+                  <td 
+                    className="px-3 py-3 clickable-cell"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit({ ...meeting, __viewOnly: true });
+                    }}
+                  >
                     <strong>{formatDate(meeting.meetingDate)}</strong>
                     {getCategoryBadge(meeting.category)}
                   </td>
-                  <td className="px-3 py-3">
+                  <td 
+                    className="px-3 py-3 clickable-cell"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit({ ...meeting, __viewOnly: true });
+                    }}
+                  >
                     {formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}
                   </td>
-                  <td className="px-3 py-3">
+                  <td 
+                    className="px-3 py-3 clickable-cell"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit({ ...meeting, __viewOnly: true });
+                    }}
+                  >
                     <div className="text-truncate" style={{ maxWidth: '200px' }} title={meeting.meetingTheme}>
                       {meeting.meetingTheme}
                     </div>
                   </td>
-                  <td className="px-3 py-3">
+                  <td 
+                    className="px-3 py-3 clickable-cell"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit({ ...meeting, __viewOnly: true });
+                    }}
+                  >
                     <div className="text-truncate" style={{ maxWidth: '150px' }} title={meeting.meetingLocation}>
                       {meeting.meetingLocation}
                     </div>
                   </td>
-                  <td className="px-3 py-3">
+                  <td 
+                    className="px-3 py-3 clickable-cell"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit({ ...meeting, __viewOnly: true });
+                    }}
+                  >
                     {getStatusBadge(meeting)}
                   </td>
                   <td className="px-3 py-3 text-center">

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Button, ListGroup, Spinner, Alert, Badge } from 'react-bootstrap';
 import { getAllRoles } from '../../api/RoleApi';
 import { addMemberPreferredRole, getMemberPreferredRoles } from '../../api/PreferredRoleApi';
+import { getAllMemberAssignedRolesByMeeting } from '../../api/AssignedRoleApi';
+import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
 
 const RoleSelectionModal = ({ show, onClose, userId, meetingId, onSaved }) => {
   const [allRoles, setAllRoles] = useState([]);
@@ -17,17 +19,53 @@ const RoleSelectionModal = ({ show, onClose, userId, meetingId, onSaved }) => {
     try {
       setLoading(true);
       setError(null);
-      // Fetch roles
-      const rolesResp = await getAllRoles();
-      // rolesResp could be direct array or wrapped in { data }
-      const rolesList = Array.isArray(rolesResp?.data) ? rolesResp.data : (Array.isArray(rolesResp) ? rolesResp : []);
-      setAllRoles(rolesList || []);
+      
+      if (!meetingId) {
+        setError('Meeting ID is required');
+        return;
+      }
+
+      // Fetch meeting-specific roles with counts
+      const rolesRes = await getAllMeetingRoleCombineByMeeting(meetingId);
+      const rolesData = rolesRes.data?.data || rolesRes.data || [];
+      
+      // Fetch all assigned roles for this meeting to calculate availability
+      const allAssignedRes = await getAllMemberAssignedRolesByMeeting(meetingId);
+      const allAssignedData = allAssignedRes.data?.data || allAssignedRes.data || [];
+      
+      // Calculate available counts for each role
+      const roleCounts = {};
+      rolesData.forEach(role => {
+        roleCounts[role.roleName] = role.roleCount || 1;
+      });
+      
+      // Subtract assigned roles from available counts
+      allAssignedData.forEach(assignment => {
+        const roleName = assignment.roleName || assignment.role?.roleName;
+        if (roleName && roleCounts[roleName] > 0) {
+          roleCounts[roleName] -= 1;
+        }
+      });
+      
+      // Filter roles to show only those that are truly available (not assigned to anyone)
+      const availableRoles = rolesData.filter(role => {
+        const hasAvailableSlots = roleCounts[role.roleName] > 0;
+        return hasAvailableSlots;
+      }).map(role => ({
+        ...role,
+        availableCount: roleCounts[role.roleName] || 0
+      }));
+      
+      setAllRoles(availableRoles);
 
       // Fetch existing preferred roles for this user+meeting
       if (userId && meetingId) {
         const prefResp = await getMemberPreferredRoles(userId, meetingId);
         const prefList = Array.isArray(prefResp?.data) ? prefResp.data : (Array.isArray(prefResp) ? prefResp : []);
-        setSelected((prefList || []).slice(0, maxSelectable));
+        const preferredRoleNames = prefList.map(role => 
+          typeof role === 'string' ? role : (role.roleName || role.name || role)
+        );
+        setSelected(preferredRoleNames.slice(0, maxSelectable));
       }
     } catch (e) {
       setError('Failed to load roles.');
@@ -114,6 +152,11 @@ const RoleSelectionModal = ({ show, onClose, userId, meetingId, onSaved }) => {
                           onClick={(e) => e.stopPropagation()}
                         />
                         {name}
+                        {role.availableCount > 1 && (
+                          <Badge bg="light" text="dark" className="ms-2">
+                            {role.availableCount} available
+                          </Badge>
+                        )}
                       </div>
                       {checked && (
                         <Badge bg="success">

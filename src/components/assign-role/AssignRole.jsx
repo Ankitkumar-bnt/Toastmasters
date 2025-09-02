@@ -9,6 +9,7 @@ import { getMemberPreferredRoles, addMemberPreferredRole } from '../../api/Prefe
 import { getMemberAssignedRole, addMemberAssignedRole } from '../../api/AssignedRoleApi';
 import { getAllRoles, addRole, updateRole, deleteRole } from '../../api/RoleApi';
 import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
+import { getLast3MeetingRoles } from '../../api/AssignedRoleApi'; // Add this import
 
 const AssignRole = () => {
   const [meetings, setMeetings] = useState([]);
@@ -21,6 +22,7 @@ const AssignRole = () => {
   const [availableRoles, setAvailableRoles] = useState([]);
   const [meetingSpecificRoles, setMeetingSpecificRoles] = useState([]);
   const [availableRoleCounts, setAvailableRoleCounts] = useState({});
+  const [roleHistory, setRoleHistory] = useState([]); // Add state for role history
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -210,22 +212,8 @@ const AssignRole = () => {
       const rolesData = response.data?.data || response.data || [];
       setMeetingSpecificRoles(rolesData);
       
-      // Initialize available role counts and subtract already assigned roles
-      const roleCounts = {};
-      rolesData.forEach(role => {
-        roleCounts[role.roleName] = role.roleCount || 1;
-      });
-      
-      // Subtract already assigned roles from available counts
-      Object.values(assignedRoles).forEach(memberRoles => {
-        memberRoles.forEach(roleName => {
-          if (roleCounts[roleName] > 0) {
-            roleCounts[roleName] -= 1;
-          }
-        });
-      });
-      
-      setAvailableRoleCounts(roleCounts);
+      // Calculate available role counts
+      calculateAvailableRoleCounts(rolesData);
       
       return rolesData;
     } catch (err) {
@@ -234,6 +222,27 @@ const AssignRole = () => {
       setAvailableRoleCounts({});
       return [];
     }
+  };
+
+  // Helper function to calculate available role counts
+  const calculateAvailableRoleCounts = (rolesData) => {
+    const roleCounts = {};
+    
+    // Initialize counts from meeting roles
+    rolesData.forEach(role => {
+      roleCounts[role.roleName] = role.roleCount || 1;
+    });
+    
+    // Subtract already assigned roles from available counts
+    Object.values(assignedRoles).forEach(memberRoles => {
+      memberRoles.forEach(roleName => {
+        if (roleCounts[roleName] > 0) {
+          roleCounts[roleName] -= 1;
+        }
+      });
+    });
+    
+    setAvailableRoleCounts(roleCounts);
   };
 
   const loadAvailableMembers = async (meetingId) => {
@@ -325,10 +334,120 @@ const AssignRole = () => {
     }
   };
 
-  const handleOpenAssignRoleModal = (member) => {
-    const userId = member.userId || member.memberId || member.user.userId;
+  const handleOpenAssignRoleModal = async (member) => {
+    const userId = member.userId || member.memberId || member.user?.userId;
+    if (!userId) {
+      console.error('No user ID found for member:', member);
+      return;
+    }
+    
     setSelectedMember(member);
     setSelectedMemberRoles(assignedRoles[userId] || []);
+    
+    // Recalculate available role counts when opening modal
+    calculateAvailableRoleCounts(meetingSpecificRoles);
+    
+    try {
+      console.log('Fetching role history for user ID:', userId);
+      const response = await getLast3MeetingRoles(userId);
+      console.log('Raw API response:', response);
+      
+      // The API returns a map where keys are meeting objects and values are role arrays
+      const history = [];
+      
+      // Check different possible response structures
+      const responseData = response.data || response;
+      console.log('Response data:', JSON.stringify(responseData, null, 2));
+      
+      if (responseData) {
+        try {
+          // Check if response is already an array of MeetingWithRolesDTO
+          if (Array.isArray(responseData)) {
+            console.log('Response is an array of MeetingWithRolesDTO');
+            responseData.forEach(item => {
+              if (item && (item.meeting || item.roles)) {
+                history.push({
+                  meeting: item.meeting || {},
+                  roles: Array.isArray(item.roles) ? item.roles : []
+                });
+              }
+            });
+          }
+          // Handle object response (legacy format)
+          else if (typeof responseData === 'object') {
+            console.log('Response is an object, processing as legacy format');
+            // Try different possible response formats
+            let meetingMap = {};
+            
+            // Case 1: Direct map in response.data.data
+            if (responseData.data && typeof responseData.data === 'object') {
+              meetingMap = responseData.data;
+            } 
+            // Case 2: Direct map in response.data
+            else {
+              meetingMap = responseData;
+            }
+            
+            console.log('Meeting map:', meetingMap);
+            
+            // Convert the map to an array of { meeting, roles } objects
+            for (const [meetingKey, roles] of Object.entries(meetingMap)) {
+              try {
+                let meeting = {};
+                
+                // Try to parse meeting if it's a string
+                if (typeof meetingKey === 'string' && meetingKey.trim().startsWith('{')) {
+                  try {
+                    meeting = JSON.parse(meetingKey);
+                  } catch (e) {
+                    console.warn('Failed to parse meeting key as JSON:', meetingKey);
+                    meeting = { meetingTheme: 'Previous Meeting' };
+                  }
+                } else if (typeof meetingKey === 'object') {
+                  meeting = meetingKey;
+                } else {
+                  meeting = { meetingTheme: meetingKey || 'Previous Meeting' };
+                }
+                
+                // Ensure roles is an array
+                const rolesArray = Array.isArray(roles) ? roles : [];
+                
+                if (rolesArray.length > 0) {
+                  history.push({
+                    meeting,
+                    roles: rolesArray
+                  });
+                }
+              } catch (e) {
+                console.error('Error processing meeting entry:', e);
+              }
+            }
+          }
+          
+          // Sort by meeting date if available
+          history.sort((a, b) => {
+            const dateA = a.meeting.meetingDate ? new Date(a.meeting.meetingDate) : new Date(0);
+            const dateB = b.meeting.meetingDate ? new Date(b.meeting.meetingDate) : new Date(0);
+            return dateB - dateA; // Sort newest first
+          });
+          
+          console.log('Processed history:', history);
+          setRoleHistory(history);
+          
+        } catch (error) {
+          console.error('Error processing role history:', error);
+          setRoleHistory([]);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching role history:', {
+        error,
+        message: error.message,
+        response: error.response?.data
+      });
+      setRoleHistory([]);
+    }
+    
     setShowAssignRoleModal(true);
   };
 
@@ -344,6 +463,7 @@ const AssignRole = () => {
     if (!selectedMember) return;
     
     const userId = selectedMember.userId || selectedMember.memberId || selectedMember.user.userId;
+    const previousRoles = assignedRoles[userId] || [];
     
     try {
       // Update local state
@@ -355,18 +475,33 @@ const AssignRole = () => {
       // Update API - send all selected roles at once
       if (selectedMemberRoles.length > 0) {
         await addMemberAssignedRole(userId, selectedMeetingId, selectedMemberRoles);
-        
-        // Update available role counts
-        setAvailableRoleCounts(prev => {
-          const updated = { ...prev };
-          selectedMemberRoles.forEach(roleName => {
-            if (updated[roleName] > 0) {
-              updated[roleName] -= 1;
-            }
-          });
-          return updated;
-        });
       }
+      
+      // Recalculate available role counts after assignment
+      const updatedAssignedRoles = {
+        ...assignedRoles,
+        [userId]: [...selectedMemberRoles]
+      };
+      
+      // Update the assigned roles state and recalculate counts
+      setAssignedRoles(updatedAssignedRoles);
+      
+      // Recalculate role counts with updated assignments
+      const roleCounts = {};
+      meetingSpecificRoles.forEach(role => {
+        roleCounts[role.roleName] = role.roleCount || 1;
+      });
+      
+      // Subtract all assigned roles from counts
+      Object.values(updatedAssignedRoles).forEach(memberRoles => {
+        memberRoles.forEach(roleName => {
+          if (roleCounts[roleName] > 0) {
+            roleCounts[roleName] -= 1;
+          }
+        });
+      });
+      
+      setAvailableRoleCounts(roleCounts);
       
       setSuccess('Roles updated successfully');
       setTimeout(() => setSuccess(''), 3000);
@@ -738,48 +873,176 @@ const AssignRole = () => {
       )}
 
       {/* Role Assignment Modal */}
-      <Modal show={showAssignRoleModal} onHide={() => setShowAssignRoleModal(false)}>
+      <Modal 
+        show={showAssignRoleModal} 
+        onHide={() => setShowAssignRoleModal(false)} 
+        size="lg" 
+        dialogClassName="modal-90w"
+        contentClassName="h-auto max-h-[90vh]"
+      >
         <Modal.Header closeButton>
           <Modal.Title>Assign Roles</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body className="p-0">
           {selectedMember && (
-            <>
-              <h5>{getMemberName(selectedMember)}</h5>
-              <p className="text-muted">Select roles to assign:</p>
-              
-              <div className="d-flex flex-wrap gap-2 mb-3">
-                {meetingSpecificRoles.length > 0 ? (
-                  meetingSpecificRoles
-                    .filter(role => {
-                      const availableCount = availableRoleCounts[role.roleName] || 0;
-                      return availableCount > 0;
-                    })
-                    .map((role) => {
-                      const roleName = role.roleName;
-                      const isSelected = selectedMemberRoles.includes(roleName);
-                      const availableCount = availableRoleCounts[role.roleName] || 0;
-                      return (
-                        <Button
-                          key={`${role.roleId}-${roleName}`}
-                          variant={isSelected ? 'primary' : 'outline-secondary'}
-                          className="me-2 mb-2"
-                          onClick={() => handleRoleSelection(roleName, isSelected)}
-                        >
-                          {roleName}
-                          {availableCount > 1 && (
-                            <Badge bg="light" text="dark" className="ms-1">
-                              {availableCount}
-                            </Badge>
-                          )}
-                        </Button>
+            <Row className="g-0">
+              {/* Left Side: Role Assignment */}
+              <Col md={7} className="p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                <h5 className="sticky-top bg-white pb-2 mb-3" style={{ top: 0, zIndex: 1 }}>
+                  {getMemberName(selectedMember)}
+                </h5>
+                <p className="text-muted mb-3">Select roles to assign:</p>
+                <div className="d-flex flex-wrap gap-2 mb-3">
+                  {meetingSpecificRoles.length > 0 ? (
+                    meetingSpecificRoles
+                      .filter(role => {
+                        const availableCount = availableRoleCounts[role.roleName] || 0;
+                        const isSelected = selectedMemberRoles.includes(role.roleName);
+                        // Show role if it's available OR if it's already assigned to this member
+                        return availableCount > 0 || isSelected;
+                      })
+                      .map((role) => {
+                        const roleName = role.roleName;
+                        const isSelected = selectedMemberRoles.includes(roleName);
+                        const availableCount = availableRoleCounts[role.roleName] || 0;
+                        return (
+                          <Button
+                            key={`${role.roleId}-${roleName}`}
+                            variant={isSelected ? 'primary' : 'outline-secondary'}
+                            className="me-2 mb-2"
+                            onClick={() => handleRoleSelection(roleName, isSelected)}
+                          >
+                            {roleName}
+                            {availableCount > 1 && (
+                              <Badge bg="light" text="dark" className="ms-1">
+                                {availableCount}
+                              </Badge>
+                            )}
+                            {isSelected && (
+                              <Badge bg="success" className="ms-1">
+                                Assigned
+                              </Badge>
+                            )}
+                          </Button>
+                        );
+                      })
+                  ) : (
+                    <p className="text-muted">No roles available for this meeting</p>
+                  )}
+                </div>
+              </Col>
+
+             {/* Right Side: Role History */}
+            <Col md={5} className="border-start p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              <h5 className="sticky-top bg-white pb-2 mb-3" style={{ top: 0, zIndex: 1 }}>Recent Role History</h5>
+              <div className="pe-2">
+                {roleHistory.length > 0 ? (
+                  roleHistory.map((item, index) => {
+                    try {
+                      const meeting = item.meeting || {};
+                      let meetingDate = 'N/A';
+                      let location = '';
+                      let timeRange = '';
+
+                      const meetingId = meeting.meetingId || 'N/A';
+                      const meetingDateStr = meeting.meetingDate || null;
+                      const theme = meeting.meetingTheme || 'No Theme';
+                      
+                      if (meetingDateStr) {
+                        try {
+                          const date = new Date(meetingDateStr);
+                          if (!isNaN(date.getTime())) {
+                            meetingDate = date.toLocaleDateString('en-GB'); // dd/MM/yyyy
+                          }
+                        } catch (e) {
+                          console.warn('Error formatting date:', e);
+                        }
+                      }
+
+                      // Format time range if available
+                      if (meeting.startTime && meeting.endTime) {
+                        const formatTime = (timeStr) => {
+                          if (!timeStr) return '';
+                          const str = String(timeStr);
+                          return str.includes(':') ? str.split(':').slice(0, 2).join(':') : str;
+                        };
+                        
+                        const start = formatTime(meeting.startTime);
+                        const end = formatTime(meeting.endTime);
+                        if (start && end) {
+                          timeRange = `${start} - ${end}`;
+                        }
+                      }
+
+                      // Build meeting details with ID, theme, and date in a cleaner format
+                      const meetingDetails = (
+                        <div>
+                          <div className="fw-bold">Meeting #{meetingId}</div>
+                          <div className="text-muted">{theme}</div>
+                          <div className="small">{meetingDate}</div>
+                        </div>
                       );
-                    })
+
+                      // Ensure roles is an array and extract role names
+                      const roles = Array.isArray(item.roles) 
+                        ? item.roles.map(r => r.roleName || r.name || 'Role').filter(Boolean)
+                        : [];
+
+                      return (
+                        <div key={index} className="mb-3 p-3 border rounded">
+                          <div className="d-flex justify-content-between align-items-start">
+                            <div>
+                              <div className="fw-bold text-primary">Meeting #{meetingId}</div>
+                              <div className="fw-medium mb-1">{theme}</div>
+                              <div className="text-muted small">
+                                <Calendar size={14} className="me-1" />
+                                {meetingDate}
+                                {timeRange && (
+                                  <span className="ms-2">
+                                    <Clock size={14} className="me-1" />
+                                    {timeRange}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <Badge bg="light" text="dark" className="text-uppercase">
+                              {index === 0 ? 'Latest' : `#${index + 1}`}
+                            </Badge>
+                          </div>
+                          
+                          {roles.length > 0 ? (
+                            <div className="mt-2 pt-2 border-top">
+                              <div className="small text-muted mb-1">Assigned Roles:</div>
+                              <div className="d-flex flex-wrap gap-1">
+                                {roles.map((roleName, roleIndex) => (
+                                  <Badge key={roleIndex} bg="info" className="text-nowrap">
+                                    {roleName}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-2 pt-2 border-top">
+                              <small className="text-muted">No roles recorded for this meeting</small>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    } catch (e) {
+                      console.warn('Error processing meeting data:', e);
+                      return (
+                        <div key={index} className="mb-3 p-2 border rounded">
+                          <p className="text-muted small">Could not load meeting details</p>
+                        </div>
+                      );
+                    }
+                  })
                 ) : (
-                  <p className="text-muted">No roles available for this meeting</p>
+                  <p className="text-muted">No recent role history found</p>
                 )}
               </div>
-            </>
+            </Col>
+            </Row>
           )}
         </Modal.Body>
         <Modal.Footer>

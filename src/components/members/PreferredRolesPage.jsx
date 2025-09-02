@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Spinner, Alert, Badge, Row, Col } from 'react-bootstrap';
-import { getMemberPreferredRoles } from '../../api/PreferredRoleApi';
-import { getMemberAssignedRole } from '../../api/AssignedRoleApi';
+import { Card, Spinner, Alert, Badge, Row, Col, Button } from 'react-bootstrap';
+import { getMemberPreferredRoles, addMemberPreferredRole, deleteMemberPreferredRole } from '../../api/PreferredRoleApi';
+import { getMemberAssignedRole, getAllMemberAssignedRolesByMeeting } from '../../api/AssignedRoleApi';
 import { getMeetingById, getAllMeetings } from '../../api/MeetingApi';
+import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
 
 const PreferredRolesPage = ({ onMeetingClick }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [meetings, setMeetings] = useState([]);
+  const [updatingPreferences, setUpdatingPreferences] = useState({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -48,7 +50,7 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
           return;
         }
 
-        // For each meeting, get preferred and assigned roles
+        // For each meeting, get preferred roles, assigned roles, and available roles with counts
         const meetingsWithRoles = [];
         
         // Process meetings sequentially to avoid too many parallel requests
@@ -59,20 +61,11 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
 
             console.log(`Fetching roles for meeting ${meetingId}...`);
             
-            // Fetch preferred roles
+            // Fetch preferred roles for current user
             let preferredRoles = [];
             try {
               console.log(`Fetching preferred roles for user ${userId}, meeting ${meetingId}`);
               const preferredRes = await getMemberPreferredRoles(userId, meetingId);
-              console.log('Preferred roles response:', {
-                status: preferredRes?.status,
-                data: preferredRes?.data,
-                dataStructure: {
-                  isArray: Array.isArray(preferredRes?.data),
-                  hasDataProperty: preferredRes?.data?.data !== undefined,
-                  dataType: typeof preferredRes?.data
-                }
-              });
               
               // Handle different response formats
               if (Array.isArray(preferredRes?.data)) {
@@ -85,27 +78,14 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
               
               console.log('Processed preferred roles:', preferredRoles);
             } catch (err) {
-              console.error('Error fetching preferred roles:', {
-                message: err.message,
-                response: err.response?.data,
-                status: err.response?.status
-              });
+              console.error('Error fetching preferred roles:', err);
             }
 
-            // Fetch assigned roles
+            // Fetch assigned roles for current user
             let assignedRoles = [];
             try {
               console.log(`Fetching assigned roles for user ${userId}, meeting ${meetingId}`);
               const assignedRes = await getMemberAssignedRole(userId, meetingId);
-              console.log('Assigned roles response:', {
-                status: assignedRes?.status,
-                data: assignedRes?.data,
-                dataStructure: {
-                  isArray: Array.isArray(assignedRes?.data),
-                  hasDataProperty: assignedRes?.data?.data !== undefined,
-                  dataType: typeof assignedRes?.data
-                }
-              });
               
               // Handle different response formats
               if (Array.isArray(assignedRes?.data)) {
@@ -118,18 +98,54 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
               
               console.log('Processed assigned roles:', assignedRoles);
             } catch (err) {
-              console.error('Error fetching assigned roles:', {
-                message: err.message,
-                response: err.response?.data,
-                status: err.response?.status
+              console.error('Error fetching assigned roles:', err);
+            }
+
+            // Fetch all available roles with counts for this meeting
+            let availableRoles = [];
+            try {
+              console.log(`Fetching available roles for meeting ${meetingId}...`);
+              const rolesRes = await getAllMeetingRoleCombineByMeeting(meetingId);
+              const rolesData = rolesRes.data?.data || rolesRes.data || [];
+              
+              // Fetch all assigned roles for this meeting to calculate availability
+              const allAssignedRes = await getAllMemberAssignedRolesByMeeting(meetingId);
+              const allAssignedData = allAssignedRes.data?.data || allAssignedRes.data || [];
+              
+              // Calculate available counts for each role
+              const roleCounts = {};
+              rolesData.forEach(role => {
+                roleCounts[role.roleName] = role.roleCount || 1;
               });
+              
+              // Subtract assigned roles from available counts
+              allAssignedData.forEach(assignment => {
+                const roleName = assignment.roleName || assignment.role?.roleName;
+                if (roleName && roleCounts[roleName] > 0) {
+                  roleCounts[roleName] -= 1;
+                }
+              });
+              
+              // Filter roles to show only those that are truly available (not assigned to anyone)
+              availableRoles = rolesData.filter(role => {
+                const hasAvailableSlots = roleCounts[role.roleName] > 0;
+                return hasAvailableSlots;
+              }).map(role => ({
+                ...role,
+                availableCount: roleCounts[role.roleName] || 0
+              }));
+              
+              console.log('Available roles with counts:', availableRoles);
+            } catch (err) {
+              console.error('Error fetching available roles:', err);
             }
 
             meetingsWithRoles.push({
               ...meeting,
               meetingId, // Ensure meetingId is set
               preferredRoles,
-              assignedRoles
+              assignedRoles,
+              availableRoles
             });
 
           } catch (err) {
@@ -200,6 +216,67 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
     return role.roleName || role.role_name || role.name || JSON.stringify(role);
   };
 
+  // Handle role preference selection
+  const handleRolePreferenceToggle = async (meetingId, roleName) => {
+    const currentUser = JSON.parse(localStorage.getItem('tm_current_user') || '{}');
+    const userId = currentUser.userId || currentUser.id;
+    
+    if (!userId) return;
+
+    const updateKey = `${meetingId}-${roleName}`;
+    setUpdatingPreferences(prev => ({ ...prev, [updateKey]: true }));
+
+    try {
+      // Find the meeting
+      const meeting = meetings.find(m => m.meetingId === meetingId);
+      if (!meeting) return;
+
+      const preferredRoleNames = meeting.preferredRoles.map(role => getRoleName(role));
+      const isCurrentlyPreferred = preferredRoleNames.includes(roleName);
+
+      if (isCurrentlyPreferred) {
+        // Remove from preferences
+        await deleteMemberPreferredRole(userId, meetingId, [roleName]);
+      } else {
+        // Add to preferences
+        await addMemberPreferredRole(userId, meetingId, [roleName]);
+      }
+
+      // Refresh the data for this meeting
+      await refreshMeetingData(meetingId, userId);
+      
+    } catch (err) {
+      console.error('Error updating role preference:', err);
+    } finally {
+      setUpdatingPreferences(prev => ({ ...prev, [updateKey]: false }));
+    }
+  };
+
+  // Refresh data for a specific meeting
+  const refreshMeetingData = async (meetingId, userId) => {
+    try {
+      // Fetch updated preferred roles
+      const preferredRes = await getMemberPreferredRoles(userId, meetingId);
+      let preferredRoles = [];
+      if (Array.isArray(preferredRes?.data)) {
+        preferredRoles = preferredRes.data;
+      } else if (preferredRes?.data?.data) {
+        preferredRoles = preferredRes.data.data;
+      } else if (preferredRes?.data) {
+        preferredRoles = [preferredRes.data];
+      }
+
+      // Update the meetings state
+      setMeetings(prev => prev.map(meeting => 
+        meeting.meetingId === meetingId 
+          ? { ...meeting, preferredRoles }
+          : meeting
+      ));
+    } catch (err) {
+      console.error('Error refreshing meeting data:', err);
+    }
+  };
+
   return (
     <div className="preferred-roles-page">
       <h2 className="mb-4 mx-5">Roles</h2>
@@ -252,11 +329,60 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
                       <div className="text-muted small">Date</div>
                       <div>{formatDate(date)}</div>
                     </div>
-                    
+
+                    {/* Available Roles Section */}
+                    <div className="mb-3">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <span className="fw-semibold">Available Roles</span>
+                        <Badge bg="light" text="dark" className="small">
+                          {meeting.availableRoles?.length || 0} roles
+                        </Badge>
+                      </div>
+                      <div className="d-flex flex-wrap gap-1">
+                        {meeting.availableRoles && meeting.availableRoles.length > 0 ? (
+                          meeting.availableRoles.map((role, idx) => {
+                            const preferredRoleNames = meeting.preferredRoles.map(r => getRoleName(r));
+                            const isPreferred = preferredRoleNames.includes(role.roleName);
+                            const updateKey = `${meetingId}-${role.roleName}`;
+                            const isUpdating = updatingPreferences[updateKey];
+                            
+                            return (
+                              <Badge 
+                                key={`avail-${idx}`} 
+                                bg={isPreferred ? "info" : "secondary"} 
+                                className="me-1 mb-1 d-flex align-items-center"
+                                style={{ 
+                                  cursor: isUpdating ? 'wait' : 'pointer',
+                                  opacity: isUpdating ? 0.6 : 1,
+                                  transition: 'all 0.2s'
+                                }}
+                                onClick={() => !isUpdating && handleRolePreferenceToggle(meetingId, role.roleName)}
+                                title={isPreferred ? 'Click to remove from preferences' : 'Click to add to preferences'}
+                              >
+                                {role.roleName}
+                                {role.availableCount > 1 && (
+                                  <span className="ms-1 badge bg-light text-dark">
+                                    {role.availableCount}
+                                  </span>
+                                )}
+                                {isPreferred && (
+                                  <span className="ms-1">★</span>
+                                )}
+                                {isUpdating && (
+                                  <Spinner size="sm" className="ms-1" />
+                                )}
+                              </Badge>
+                            );
+                          })
+                        ) : (
+                          <span className="text-muted">No roles available</span>
+                        )}
+                      </div>
+                    </div>
 
                     <div className="mb-3">
                       <div className="d-flex justify-content-between align-items-center mb-2">
-                        <span className="fw-semibold">Preferred Roles</span>
+                        <span className="fw-semibold">Your Preferred Roles</span>
                       </div>
                       <div className="d-flex flex-wrap gap-1">
                         {preferredRoles.length > 0 ? (
@@ -277,7 +403,7 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
 
                     <div>
                       <div className="d-flex justify-content-between align-items-center mb-2">
-                        <span className="fw-semibold">Assigned Roles</span>
+                        <span className="fw-semibold">Your Assigned Roles</span>
                       </div>
                       <div className="d-flex flex-wrap gap-1">
                         {assignedRoles.length > 0 ? (
