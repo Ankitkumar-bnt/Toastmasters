@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Badge, Spinner, Card, Pagination, Dropdown } from 'react-bootstrap';
 import './MeetingsList.css'; // Import the CSS file
-import { Edit, Trash2, Plus, Calendar, Clock, MapPin, FileText, Filter } from 'lucide-react';
+import { Edit, Trash2, Plus, Calendar, Clock, MapPin, FileText, Filter, Search, ChevronUp, ChevronDown } from 'lucide-react';
 
 const MeetingsList = ({ meetings, loading, onEdit, onDelete, onAdd }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState('desc'); // 'asc' or 'desc'
   const meetingsPerPage = 6;
 
-  // Reset to first page when meetings change or filter changes
+  // Reset to first page when meetings change, filter changes, or search query changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [meetings, categoryFilter]);
+  }, [meetings, categoryFilter, searchQuery]);
 
   // Calculate meeting status counts
   const getMeetingCounts = () => {
@@ -41,15 +43,55 @@ const MeetingsList = ({ meetings, loading, onEdit, onDelete, onAdd }) => {
     return { total: meetings.length, upcoming, ongoing, past };
   };
 
-  // Filter meetings by category
+  // Filter meetings by category and search query
   const filteredMeetings = meetings ? meetings.filter(meeting => {
-    if (categoryFilter === 'All') return true;
-    if (categoryFilter === 'Regular') return !meeting.category || meeting.category === 'Regular';
-    return meeting.category === categoryFilter;
+    // Category filter
+    let categoryMatch = true;
+    if (categoryFilter !== 'All') {
+      if (categoryFilter === 'Regular') {
+        categoryMatch = !meeting.category || meeting.category === 'Regular';
+      } else {
+        categoryMatch = meeting.category === categoryFilter;
+      }
+    }
+
+    // Search filter
+    let searchMatch = true;
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      const meetingDate = meeting.meetingDate || '';
+      const meetingTheme = meeting.meetingTheme || '';
+      const meetingLocation = meeting.meetingLocation || '';
+      const meetingId = meeting.meetingId ? meeting.meetingId.toString() : '';
+      
+      // Get day name from date
+      let dayName = '';
+      if (meetingDate) {
+        try {
+          const date = new Date(meetingDate);
+          dayName = date.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        } catch (e) {
+          dayName = '';
+        }
+      }
+
+      searchMatch = 
+        meetingId.includes(query) ||
+        meetingTheme.toLowerCase().includes(query) ||
+        meetingLocation.toLowerCase().includes(query) ||
+        meetingDate.includes(query) ||
+        dayName.includes(query);
+    }
+
+    return categoryMatch && searchMatch;
   }) : [];
 
-  // Sort meetings by date (most recent first)
-  const sortedMeetings = [...filteredMeetings].sort((a, b) => new Date(b.date) - new Date(a.date));
+  // Sort meetings by date based on sort order
+  const sortedMeetings = [...filteredMeetings].sort((a, b) => {
+    const dateA = new Date(a.meetingDate);
+    const dateB = new Date(b.meetingDate);
+    return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+  });
 
   // Calculate pagination
   const totalPages = Math.ceil(sortedMeetings.length / meetingsPerPage);
@@ -159,52 +201,97 @@ const MeetingsList = ({ meetings, loading, onEdit, onDelete, onAdd }) => {
             <Badge bg="secondary">Past: {meetingCounts.past}</Badge>
           </div>
         </div>
-        <div className="d-flex gap-2">
-          <Dropdown>
-            <Dropdown.Toggle variant="outline-primary" size="sm" className="shadow-sm border-2">
-              <Filter size={16} className="me-2" />
-              <strong>Filter:</strong> {categoryFilter}
-            </Dropdown.Toggle>
-            <Dropdown.Menu className="shadow-lg border-0">
-              <Dropdown.Header className="text-muted small">
-                <Filter size={14} className="me-1" />
-                Meeting Categories
-              </Dropdown.Header>
-              <Dropdown.Item 
-                active={categoryFilter === 'All'} 
-                onClick={() => setCategoryFilter('All')}
-                className="d-flex align-items-center"
+        <div className="d-flex gap-2 align-items-center">
+          {/* Search Bar */}
+          <div className="position-relative" style={{ minWidth: '450px' }}>
+            <Search size={16} className="position-absolute" style={{ left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#6c757d' }} />
+            <input
+              type="text"
+              className="form-control ps-5"
+              placeholder="Search by ID, theme, date, day, or location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ 
+                fontSize: '14px',
+                borderRadius: '6px',
+                border: '2px solid #e9ecef',
+                transition: 'border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#0d6efd';
+                e.target.style.boxShadow = '0 0 0 0.2rem rgba(13, 110, 253, 0.25)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = '#e9ecef';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+            {searchQuery && (
+              <button
+                className="btn btn-sm position-absolute"
+                style={{ right: '8px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', color: '#6c757d' }}
+                onClick={() => setSearchQuery('')}
+                title="Clear search"
               >
-                <span className="me-2">📋</span>
-                All Meetings
-              </Dropdown.Item>
-              <Dropdown.Divider />
-              <Dropdown.Item 
-                active={categoryFilter === 'Regular'} 
-                onClick={() => setCategoryFilter('Regular')}
-                className="d-flex align-items-center"
+                ×
+              </button>
+            )}
+          </div>
+          
+          {/* 🔽 Filter + Sort */}
+          <div className="d-flex align-items-center">
+            {/* Filter Dropdown */}
+            <Dropdown>
+              <Dropdown.Toggle 
+                variant="outline-primary" 
+                size="sm" 
+                className="shadow-sm border-2"
               >
-                <span className="me-2">🟢</span>
-                Regular
-              </Dropdown.Item>
-              <Dropdown.Item 
-                active={categoryFilter === 'Special'} 
-                onClick={() => setCategoryFilter('Special')}
-                className="d-flex align-items-center"
-              >
-                <span className="me-2">🔴</span>
-                Special
-              </Dropdown.Item>
-              <Dropdown.Item 
-                active={categoryFilter === 'Contest'} 
-                onClick={() => setCategoryFilter('Contest')}
-                className="d-flex align-items-center"
-              >
-                <span className="me-2">🟡</span>
-                Contest
-              </Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown>
+                <Filter size={16} className="me-1" />
+                {categoryFilter}
+              </Dropdown.Toggle>
+              <Dropdown.Menu className="shadow-lg border-0">
+                <Dropdown.Item 
+                  active={categoryFilter === 'All'} 
+                  onClick={() => setCategoryFilter('All')}
+                >
+                  📋 All Meetings
+                </Dropdown.Item>
+                <Dropdown.Divider />
+                <Dropdown.Item 
+                  active={categoryFilter === 'Regular'} 
+                  onClick={() => setCategoryFilter('Regular')}
+                >
+                  🟢 Regular
+                </Dropdown.Item>
+                <Dropdown.Item 
+                  active={categoryFilter === 'Special'} 
+                  onClick={() => setCategoryFilter('Special')}
+                >
+                  🔴 Special
+                </Dropdown.Item>
+                <Dropdown.Item 
+                  active={categoryFilter === 'Contest'} 
+                  onClick={() => setCategoryFilter('Contest')}
+                >
+                  🟡 Contest
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
+
+            {/* Compact Sort Button */}
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              className="ms-2 d-flex align-items-center"
+              onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+              title={`Sort by Date ${sortOrder === 'desc' ? 'Ascending' : 'Descending'}`}
+            >
+              <Calendar size={14} className="me-1" />
+              {sortOrder === 'desc' ? "Date ↓" : "Date ↑"}
+            </Button>
+          </div>
+
           <Button variant="primary" onClick={onAdd}>
             <Plus size={20} className="me-2" />
             Add Meeting

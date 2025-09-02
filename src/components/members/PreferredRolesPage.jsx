@@ -126,11 +126,8 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
                 }
               });
               
-              // Filter roles to show only those that are truly available (not assigned to anyone)
-              availableRoles = rolesData.filter(role => {
-                const hasAvailableSlots = roleCounts[role.roleName] > 0;
-                return hasAvailableSlots;
-              }).map(role => ({
+              // Show all roles that have available slots (including those assigned to current user)
+              availableRoles = rolesData.map(role => ({
                 ...role,
                 availableCount: roleCounts[role.roleName] || 0
               }));
