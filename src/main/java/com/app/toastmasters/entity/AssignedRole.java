@@ -10,7 +10,6 @@ import javax.management.relation.Role;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@ToString
 @Table( name = "assigned_roles")
 public class AssignedRole {
 

@@ -2,7 +2,7 @@ package com.app.toastmasters.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-@ToString
+
 @Entity
 @Table(name = "meeting_roles")
 @Getter

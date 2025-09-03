@@ -1,0 +1,34 @@
+package com.app.toastmasters.entity;
+
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Setter
+@Getter
+@NoArgsConstructor
+@AllArgsConstructor
+public class Agenda {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int agendaId;
+    private int minTime;
+    private int avgTime;
+    private int maxTime;
+    private String activity;
+    private LocalDateTime agendaCreatedDate = LocalDateTime.now();
+
+    @ManyToOne
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne
+    @JoinColumn(name = "meeting_id", nullable = false)
+    private Meeting meeting;
+}

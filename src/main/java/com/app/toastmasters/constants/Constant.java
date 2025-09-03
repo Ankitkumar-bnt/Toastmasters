@@ -52,9 +52,51 @@ public class Constant {
 
 	// Extras
 	public static final String EMPTY_LIST = "List is empty";
+	public static final String EMPTY_OBJECT = "Object is null";
 
+	//Agenda
+	public static final String AGENDA_ROWS_ADDED_SUCCESS = "Agenda rows added successfully";
+	public static final String SPEAKER_SPEECH_ADDED = "Speaker Speech added successfully";
+	public static final String FOUND_ALL_SPEAKER_SPEECH = "Found all Speaker Speeches";
+	public static final String FOUND_SPEAKER_SPEECH = "Found Speaker Speech";
+	public static final String SPEAKER_SPEECH_UPDATED = "Speaker Speech updated successfully";
+	public static final String SPEAKER_SPEECH_DELETED = "Speaker Speech deleted successfully";
+	public static final String SPEAKER_SPEECH_NOT_FOUND = "Speaker Speech not found";
 
+	// Grammarian Messages
+	public static final String GRAMMARIAN_ADDED_SUCCESS = "Grammarian words added successfully";
+	public static final String GRAMMARIAN_FOUND_ALL = "All grammarian words found";
+	public static final String GRAMMARIAN_NOT_FOUND = "No grammarian data found for given user and meeting";
+	public static final String GRAMMARIAN_FOUND = "Grammarian data found";
+	public static final String GRAMMARIAN_UPDATE_SUCCESS = "Grammarian words updated successfully";
+	public static final String GRAMMARIAN_UPDATE_FAIL = "No grammarian data found to update";
+	public static final String GRAMMARIAN_DELETE_SUCCESS = "Grammarian words deleted successfully";
+	public static final String GRAMMARIAN_DELETE_FAIL = "No grammarian data found to delete";
 
+	// Abbreviations
+	public static final String ABBREVIATION_CREATED = "Abbreviation created successfully";
+	public static final String ABBREVIATION_FOUND_ALL = "All abbreviations found successfully";
+	public static final String ABBREVIATION_FOUND = "Abbreviation found successfully";
+	public static final String ABBREVIATION_NOT_FOUND = "Abbreviation not found";
+	public static final String ABBREVIATION_UPDATE_SUCCESS = "Abbreviation updated successfully";
+	public static final String ABBREVIATION_UPDATE_FAIL = "Abbreviation update failed, not found";
+	public static final String ABBREVIATION_DELETE_SUCCESS = "Abbreviation deleted successfully";
+	public static final String ABBREVIATION_DELETE_FAIL = "Abbreviation delete failed, not found";
 
+	// Club Officers
+	public static final String CLUB_OFFICER_CREATED = "Club officer added successfully";
+	public static final String CLUB_OFFICER_FOUND_ALL = "All club officers retrieved successfully";
+	public static final String CLUB_OFFICER_NOT_FOUND = "No club officers found";
+	public static final String CLUB_OFFICER_UPDATE_SUCCESS = "Club officer updated successfully";
+	public static final String CLUB_OFFICER_UPDATE_FAIL = "Club officer not found, update failed";
+	public static final String CLUB_OFFICER_DELETE_SUCCESS = "Club officer deleted successfully";
+	public static final String CLUB_OFFICER_DELETE_FAIL = "Club officer not found, delete failed";
 
+	// AgendaStaticInfo
+	public static final String STATIC_INFO_CREATED = "Agenda static info created successfully";
+	public static final String STATIC_INFO_UPDATED = "Agenda static info updated successfully";
+	public static final String STATIC_INFO_DELETED = "Agenda static info deleted successfully";
+	public static final String STATIC_INFO_FOUND   = "Agenda static info found successfully";
+	public static final String FOUND_ALL_STATIC_INFO = "Found all agenda static info";
+	public static final String STATIC_INFO_NOT_FOUND = "Agenda static info not found";
 }
