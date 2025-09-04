@@ -1,7 +1,8 @@
 package com.app.toastmasters.services;
 
+import com.app.toastmasters.constants.Constant;
 import com.app.toastmasters.entity.Agenda;
-import com.app.toastmasters.entity.AgendaJoin;
+import com.app.toastmasters.entity.AgendaJoinDTO;
 import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.User;
 import com.app.toastmasters.entity.agenda.*;
@@ -21,27 +22,30 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
     private final ClubOfficersRepository clubOfficers;
     private final AgendaRepository agenda;
     private final SpeakerSpeechRepository speakerSpeech;
-    private final GrammarianRepository grammarian;
+    private final GrammarianRepository grammarianRepo;
     private final AbbreviationRepository abbreviations;
     private final UserRepository userRepository;
     private final MeetingRepository meetingRepository;
 
-    public AgendaJoinServiceImpl(AgendaStaticInfoRepository agendaStaticInfo, ClubOfficersRepository clubOfficers, AgendaRepository agenda, SpeakerSpeechRepository speakerSpeech, GrammarianRepository grammarian, AbbreviationRepository abbreviations, UserRepository userRepository, MeetingRepository meetingRepository) {
+    public AgendaJoinServiceImpl(AgendaStaticInfoRepository agendaStaticInfo, ClubOfficersRepository clubOfficers, AgendaRepository agenda, SpeakerSpeechRepository speakerSpeech, GrammarianRepository grammarianRepo, AbbreviationRepository abbreviations, UserRepository userRepository, MeetingRepository meetingRepository) {
         this.agendaStaticInfo = agendaStaticInfo;
         this.clubOfficers = clubOfficers;
         this.agenda = agenda;
         this.speakerSpeech = speakerSpeech;
-        this.grammarian = grammarian;
+        this.grammarianRepo = grammarianRepo;
         this.abbreviations = abbreviations;
         this.userRepository = userRepository;
         this.meetingRepository = meetingRepository;
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<AgendaJoinDTO>> getAgenda(int userId, int meetingId) {
+    public ResponseEntity<ResponseMessage<AgendaJoinDTO>> getAgenda(int speakerId, int grammarianId, int meetingId) {
 
-        Optional<User> user = userRepository.findById(userId);
-        User userData = user.get();
+        Optional<User> speaker = userRepository.findById(speakerId);
+        User speakerData = speaker.get();
+
+        Optional<User> grammarian = userRepository.findById(grammarianId);
+        User grammarianData = grammarian.get();
 
         Optional<Meeting> meeting = meetingRepository.findById(meetingId);
         Meeting meetingData = meeting.get();
@@ -52,22 +56,22 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
 
         List<Agenda> agendaList = agenda.findAllByMeeting(meetingData);
 
-        List<SpeakerSpeech> speakerSpeeches = speakerSpeech.findAllByUserAndMeeting(userData, meetingData);
+        List<SpeakerSpeech> speakerSpeeches = speakerSpeech.findAllByUserAndMeeting(speakerData, meetingData);
 
-        List<Grammarian> grammarians = grammarian.findAllByUserIdAndMeetingId(userData, meetingData);
+        List<Grammarian> grammarians = grammarianRepo.findAllByUserIdAndMeetingId(grammarianData, meetingData);
 
         List<Abbreviations> abbreviationsList = abbreviations.findAll();
 
-        AgendaJoinDTO AgendaJoinDTO = new AgendaJoinDTO();
-        AgendaJoinDTO.setAgendaStaticInfo(staticInfo);
-        AgendaJoinDTO.setClubOfficers(clubOfficer);
-        AgendaJoinDTO.setAgenda(agendaList);
-        AgendaJoinDTO.setSpeakerSpeech(speakerSpeeches);
-        AgendaJoinDTO.setGrammarian(grammarians);
-        AgendaJoinDTO.setAbbreviations(abbreviationsList);
+        AgendaJoinDTO agendaJoinDTO = new AgendaJoinDTO();
+        agendaJoinDTO.setAgendaStaticInfo(staticInfo);
+        agendaJoinDTO.setClubOfficers(clubOfficer);
+        agendaJoinDTO.setAgenda(agendaList);
+        agendaJoinDTO.setSpeakerSpeech(speakerSpeeches);
+        agendaJoinDTO.setGrammarian(grammarians);
+        agendaJoinDTO.setAbbreviations(abbreviationsList);
 
         ResponseMessage<AgendaJoinDTO> responseMessage =
-                new ResponseMessage<>(HttpStatus.OK,"",AgendaJoinDTO);
+                new ResponseMessage<>(HttpStatus.OK, Constant.AGENDA_DISPLAY_SUCCESS, agendaJoinDTO);
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 }

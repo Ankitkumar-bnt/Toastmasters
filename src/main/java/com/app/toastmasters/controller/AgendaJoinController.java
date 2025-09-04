@@ -1,6 +1,5 @@
 package com.app.toastmasters.controller;
 
-import com.app.toastmasters.entity.AgendaJoin;
 import com.app.toastmasters.entity.AgendaJoinDTO;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.services.AgendaJoinService;
@@ -20,10 +19,10 @@ public class AgendaJoinController {
         this.agendaJoinService = agendaJoinService;
     }
 
-    @GetMapping("/getAgenda/{userId}/{meetingId}")
+    @GetMapping("/getAgenda/{speakerId}/{grammarianId}/{meetingId}")
     public ResponseEntity<ResponseMessage<AgendaJoinDTO>> getAgenda(
-            @PathVariable int userId, @PathVariable int meetingId){
-        return agendaJoinService.getAgenda(userId, meetingId);
+            @PathVariable int speakerId, @PathVariable int grammarianId, @PathVariable int meetingId){
+        return agendaJoinService.getAgenda(speakerId, grammarianId, meetingId);
     }
 
 

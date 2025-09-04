@@ -62,6 +62,7 @@ public class Constant {
 	public static final String SPEAKER_SPEECH_UPDATED = "Speaker Speech updated successfully";
 	public static final String SPEAKER_SPEECH_DELETED = "Speaker Speech deleted successfully";
 	public static final String SPEAKER_SPEECH_NOT_FOUND = "Speaker Speech not found";
+	public static final String AGENDA_DISPLAY_SUCCESS = "Agenda display successfully";
 
 	// Grammarian Messages
 	public static final String GRAMMARIAN_ADDED_SUCCESS = "Grammarian words added successfully";
