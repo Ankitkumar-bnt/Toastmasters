@@ -27,9 +27,9 @@ public class Grammarian {
 
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
-    private User userId;
+    private User user;
 
     @ManyToOne
     @JoinColumn(name = "meeting_id", nullable = false)
-    private Meeting meetingId;
+    private Meeting meeting;
 }

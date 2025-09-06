@@ -56,7 +56,7 @@ public class GrammarianServiceImpl implements GrammarianService {
 
     @Override
     public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> getWordsDataByUserAndMeeting(int userId, int meetingId) {
-        Optional<Grammarian> optional = grammarianRepository.findByUserId_UserIdAndMeetingId_MeetingId(userId, meetingId);
+        Optional<Grammarian> optional = grammarianRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
 
         if (optional.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -72,7 +72,7 @@ public class GrammarianServiceImpl implements GrammarianService {
         if (dto == null)
             throw new EmptyObjectException(Constant.EMPTY_OBJECT);
 
-        Optional<Grammarian> optional = grammarianRepository.findByUserId_UserIdAndMeetingId_MeetingId(userId, meetingId);
+        Optional<Grammarian> optional = grammarianRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
 
         if (optional.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -83,8 +83,8 @@ public class GrammarianServiceImpl implements GrammarianService {
 
         Grammarian updatedEntity = grammarianMapper.toEntity(dto);
         updatedEntity.setGrammarianId(existing.getGrammarianId());
-        updatedEntity.setUserId(existing.getUserId());
-        updatedEntity.setMeetingId(existing.getMeetingId());
+        updatedEntity.setUser(existing.getUser());
+        updatedEntity.setMeeting(existing.getMeeting());
 
         Grammarian updated = grammarianRepository.save(updatedEntity);
 
@@ -95,7 +95,7 @@ public class GrammarianServiceImpl implements GrammarianService {
 
     @Override
     public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> deleteWordsDataByUserAndMeeting(int userId, int meetingId) {
-        Optional<Grammarian> optional = grammarianRepository.findByUserId_UserIdAndMeetingId_MeetingId(userId, meetingId);
+        Optional<Grammarian> optional = grammarianRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
 
         if (optional.isEmpty()) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

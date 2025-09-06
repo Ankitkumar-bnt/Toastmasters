@@ -13,9 +13,9 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class AgendaResponseDTO {
     private int agendaId;
-    private int minTime;
-    private int avgTime;
-    private int maxTime;
+    private String minTime;
+    private String avgTime;
+    private String maxTime;
     private String activity;
     private LocalDateTime agendaCreatedDate;
     private int userId;

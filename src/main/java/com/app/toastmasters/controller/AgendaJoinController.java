@@ -1,14 +1,12 @@
 package com.app.toastmasters.controller;
 
-import com.app.toastmasters.entity.AgendaJoinDTO;
+import com.app.toastmasters.dto.responseDTO.AgendaJoinDTO;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.services.AgendaJoinService;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
+@CrossOrigin(origins = "http://localhost:5173")
 @RestController
 @RequestMapping("/agenda")
 public class AgendaJoinController {
@@ -19,11 +17,9 @@ public class AgendaJoinController {
         this.agendaJoinService = agendaJoinService;
     }
 
-    @GetMapping("/getAgenda/{speakerId}/{grammarianId}/{meetingId}")
-    public ResponseEntity<ResponseMessage<AgendaJoinDTO>> getAgenda(
-            @PathVariable int speakerId, @PathVariable int grammarianId, @PathVariable int meetingId){
-        return agendaJoinService.getAgenda(speakerId, grammarianId, meetingId);
+    @GetMapping("/getAgenda/{meetingId}")
+    public ResponseEntity<ResponseMessage<AgendaJoinDTO>> getAgenda(@PathVariable int meetingId){
+        return agendaJoinService.getAgenda(meetingId);
     }
-
 
 }

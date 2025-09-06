@@ -2,10 +2,11 @@ package com.app.toastmasters.services;
 
 import com.app.toastmasters.constants.Constant;
 import com.app.toastmasters.entity.Agenda;
-import com.app.toastmasters.entity.AgendaJoinDTO;
+import com.app.toastmasters.dto.responseDTO.AgendaJoinDTO;
 import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.User;
 import com.app.toastmasters.entity.agenda.*;
+import com.app.toastmasters.mapper.*;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.repository.*;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class AgendaJoinServiceImpl implements AgendaJoinService{
@@ -27,7 +29,14 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
     private final UserRepository userRepository;
     private final MeetingRepository meetingRepository;
 
-    public AgendaJoinServiceImpl(AgendaStaticInfoRepository agendaStaticInfo, ClubOfficersRepository clubOfficers, AgendaRepository agenda, SpeakerSpeechRepository speakerSpeech, GrammarianRepository grammarianRepo, AbbreviationRepository abbreviations, UserRepository userRepository, MeetingRepository meetingRepository) {
+    private final AgendaStaticInfoMapper staticInfoMapper;
+    private final ClubOfficersMapper officersMapper;
+    private final AgendaMapper agendaMapper;
+    private final SpeakerSpeechMapper speechMapper;
+    private final GrammarianMapper grammarianMapper;
+    private final AbbreviationsMapper abbreviationsMapper;
+
+    public AgendaJoinServiceImpl(AgendaStaticInfoRepository agendaStaticInfo, ClubOfficersRepository clubOfficers, AgendaRepository agenda, SpeakerSpeechRepository speakerSpeech, GrammarianRepository grammarianRepo, AbbreviationRepository abbreviations, UserRepository userRepository, MeetingRepository meetingRepository, AgendaStaticInfoMapper staticInfoMapper, ClubOfficersMapper officersMapper, AgendaMapper agendaMapper, SpeakerSpeechMapper speechMapper, GrammarianMapper grammarianMapper, AbbreviationsMapper abbreviationsMapper) {
         this.agendaStaticInfo = agendaStaticInfo;
         this.clubOfficers = clubOfficers;
         this.agenda = agenda;
@@ -36,16 +45,16 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
         this.abbreviations = abbreviations;
         this.userRepository = userRepository;
         this.meetingRepository = meetingRepository;
+        this.staticInfoMapper = staticInfoMapper;
+        this.officersMapper = officersMapper;
+        this.agendaMapper = agendaMapper;
+        this.speechMapper = speechMapper;
+        this.grammarianMapper = grammarianMapper;
+        this.abbreviationsMapper = abbreviationsMapper;
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<AgendaJoinDTO>> getAgenda(int speakerId, int grammarianId, int meetingId) {
-
-        Optional<User> speaker = userRepository.findById(speakerId);
-        User speakerData = speaker.get();
-
-        Optional<User> grammarian = userRepository.findById(grammarianId);
-        User grammarianData = grammarian.get();
+    public ResponseEntity<ResponseMessage<AgendaJoinDTO>> getAgenda(int meetingId) {
 
         Optional<Meeting> meeting = meetingRepository.findById(meetingId);
         Meeting meetingData = meeting.get();
@@ -56,19 +65,26 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
 
         List<Agenda> agendaList = agenda.findAllByMeeting(meetingData);
 
-        List<SpeakerSpeech> speakerSpeeches = speakerSpeech.findAllByUserAndMeeting(speakerData, meetingData);
+        List<SpeakerSpeech> speakerSpeeches = speakerSpeech.findAllByMeeting(meetingData);
 
-        List<Grammarian> grammarians = grammarianRepo.findAllByUserIdAndMeetingId(grammarianData, meetingData);
+        List<Grammarian> grammarians = grammarianRepo.findAllByMeeting(meetingData);
 
         List<Abbreviations> abbreviationsList = abbreviations.findAll();
 
         AgendaJoinDTO agendaJoinDTO = new AgendaJoinDTO();
-        agendaJoinDTO.setAgendaStaticInfo(staticInfo);
-        agendaJoinDTO.setClubOfficers(clubOfficer);
-        agendaJoinDTO.setAgenda(agendaList);
-        agendaJoinDTO.setSpeakerSpeech(speakerSpeeches);
-        agendaJoinDTO.setGrammarian(grammarians);
-        agendaJoinDTO.setAbbreviations(abbreviationsList);
+
+        agendaJoinDTO.setAgendaStaticInfo(staticInfo.stream()
+                .map(x->staticInfoMapper.toResponseDTO(x)).collect(Collectors.toList()));
+        agendaJoinDTO.setClubOfficers(clubOfficer.stream()
+                .map(x->officersMapper.toResponseDTO(x)).collect(Collectors.toList()));
+        agendaJoinDTO.setAgenda(agendaList.stream()
+                .map(x->agendaMapper.toDTO(x)).collect(Collectors.toList()));
+        agendaJoinDTO.setSpeakerSpeech(speakerSpeeches.stream()
+                .map(x->speechMapper.toDTO(x)).collect(Collectors.toList()));
+        agendaJoinDTO.setGrammarian(grammarians.stream()
+                .map(x->grammarianMapper.toResponseDTO(x)).collect(Collectors.toList()));
+        agendaJoinDTO.setAbbreviations(abbreviationsList.stream()
+                .map(x->abbreviationsMapper.toResponseDTO(x)).collect(Collectors.toList()));
 
         ResponseMessage<AgendaJoinDTO> responseMessage =
                 new ResponseMessage<>(HttpStatus.OK, Constant.AGENDA_DISPLAY_SUCCESS, agendaJoinDTO);

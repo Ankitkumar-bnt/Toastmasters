@@ -12,12 +12,12 @@ import java.util.Optional;
 
 @Repository
 public interface GrammarianRepository extends JpaRepository<Grammarian, Integer> {
-    Optional<Grammarian> findByUserId_UserIdAndMeetingId_MeetingId(int userId, int meetingId);
+
+    Optional<Grammarian> findByUser_UserIdAndMeeting_MeetingId(int userId, int meetingId);
 
     @Transactional
-    void deleteByUserId_UserIdAndMeetingId_MeetingId(int userId, int meetingId);
+    void deleteByUser_UserIdAndMeeting_MeetingId(int userId, int meetingId);
 
-//    List<Grammarian> findAllByUserAndMeeting(User userData, Meeting meetingData);
-
-    List<Grammarian> findAllByUserIdAndMeetingId(User userData, Meeting meetingData);
+    List<Grammarian> findAllByMeeting(Meeting meeting);
 }
+

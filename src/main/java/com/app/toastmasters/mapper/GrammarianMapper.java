@@ -8,15 +8,18 @@ import org.mapstruct.*;
 @Mapper(componentModel = "spring")
 public interface GrammarianMapper {
 
-    @Mapping(source = "userId", target = "userId.userId")
-    @Mapping(source = "meetingId", target = "meetingId.meetingId")
+    // Map DTO → Entity
+    @Mapping(source = "userId", target = "user.userId")
+    @Mapping(source = "meetingId", target = "meeting.meetingId")
     Grammarian toEntity(GrammarianRequestDTO requestDTO);
 
-    @Mapping(source = "userId.userId", target = "userId")
-    @Mapping(source = "meetingId.meetingId", target = "meetingId")
+    // Map Entity → ResponseDTO
+    @Mapping(source = "user.userId", target = "userId")
+    @Mapping(source = "meeting.meetingId", target = "meetingId")
     GrammarianResponseDTO toResponseDTO(Grammarian grammarian);
 
-    @Mapping(source = "userId", target = "userId.userId")
-    @Mapping(source = "meetingId", target = "meetingId.meetingId")
+    // Update entity from DTO
+    @Mapping(source = "userId", target = "user.userId")
+    @Mapping(source = "meetingId", target = "meeting.meetingId")
     void updateEntityFromDto(GrammarianRequestDTO dto, @MappingTarget Grammarian entity);
 }

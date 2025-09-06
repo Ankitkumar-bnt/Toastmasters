@@ -20,4 +20,6 @@ public interface UserService {
     ResponseEntity<ResponseMessage<UserResponseDTO>> updateMember(Integer userId, @Valid UserRequestDTO userRequestDTO);
 
 	ResponseEntity<ResponseMessage<UserResponseDTO>> deleteMember(Integer userId);
+
+	ResponseEntity<ResponseMessage<UserResponseDTO>> getUserById(int userId);
 }

@@ -13,5 +13,5 @@ import java.util.Optional;
 public interface SpeakerSpeechRepository extends JpaRepository<SpeakerSpeech, Integer> {
     Optional<SpeakerSpeech> findByUser_UserIdAndMeeting_MeetingId(int userId, int meetingId);
 
-    List<SpeakerSpeech> findAllByUserAndMeeting(User userData, Meeting meetingData);
+    List<SpeakerSpeech> findAllByMeeting(Meeting meetingData);
 }

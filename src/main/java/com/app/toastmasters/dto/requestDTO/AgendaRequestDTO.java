@@ -10,9 +10,9 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgendaRequestDTO {
-    private int minTime;
-    private int avgTime;
-    private int maxTime;
+    private String minTime;
+    private String avgTime;
+    private String maxTime;
     private String activity;
     private int userId;
     private int meetingId;

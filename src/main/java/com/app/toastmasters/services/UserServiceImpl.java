@@ -137,5 +137,16 @@ public class UserServiceImpl implements UserService {
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 
+    @Override
+    public ResponseEntity<ResponseMessage<UserResponseDTO>> getUserById(int userId) {
+        Optional<User> user = userRepo.findById(userId);
+        if(user.isEmpty())
+            throw new MemberNotFoundException(Constant.MEMBER_NOT_FOUND);
+        User userData = user.get();
+        ResponseMessage<UserResponseDTO> responseMessage =
+                new ResponseMessage<>(HttpStatus.OK, Constant.FOUND_ALL_MEMBERS, mapper.toResponseDTO(userData));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
 }
 

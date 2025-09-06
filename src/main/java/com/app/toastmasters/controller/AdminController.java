@@ -35,6 +35,11 @@ public class AdminController {
 		return userService.getAllMember();
 	}
 
+	@GetMapping("/getUserById/{userId}")
+	public ResponseEntity<ResponseMessage<UserResponseDTO>> getUserById(@PathVariable int userId){
+		return userService.getUserById(userId);
+	}
+
 	@PatchMapping("/updateMember/{userId}")
 	public ResponseEntity<ResponseMessage<UserResponseDTO>> updateMember(@PathVariable Integer userId, @Valid @RequestBody UserRequestDTO userRequestDTO)
 	{
