@@ -12,9 +12,9 @@ public interface GrammarianService {
 
     ResponseEntity<ResponseMessage<List<GrammarianResponseDTO>>> getAllWordsData();
 
-    ResponseEntity<ResponseMessage<GrammarianResponseDTO>> getWordsDataByUserAndMeeting(int userId, int meetingId);
+    ResponseEntity<ResponseMessage<List<GrammarianResponseDTO>>> getWordsDataByMeeting(int meetingId);
 
-    ResponseEntity<ResponseMessage<GrammarianResponseDTO>> updateWordsDataByUserAndMeeting(GrammarianRequestDTO dto, int userId, int meetingId);
+    ResponseEntity<ResponseMessage<GrammarianResponseDTO>> updateWordsDataByMeeting(GrammarianRequestDTO dto, int meetingId, String wordType);
 
-    ResponseEntity<ResponseMessage<GrammarianResponseDTO>> deleteWordsDataByUserAndMeeting(int userId, int meetingId);
+    ResponseEntity<ResponseMessage<GrammarianResponseDTO>> deleteWordsDataByMeeting(int meetingId);
 }

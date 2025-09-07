@@ -26,4 +26,14 @@ public class AgendaController {
 
         return agendaService.addAgendaRows(agendaRows);
     }
+
+    @GetMapping("/getAllAgendaRows")
+    public ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAllAgendaRows(){
+        return agendaService.getAllAgendaRows();
+    }
+
+    @GetMapping("/getAgendaRowsByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAgendaRowsByMeeting(@PathVariable int meetingId){
+        return agendaService.getAgendaRowsByMeeting(meetingId);
+    }
 }

@@ -11,6 +11,7 @@ import java.util.List;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
+@RequestMapping("/agenda")
 public class GrammarianController {
 
     private final GrammarianService grammarianService;
@@ -31,22 +32,20 @@ public class GrammarianController {
         return grammarianService.getAllWordsData();
     }
 
-    @GetMapping("/getWordsDataByUserAndMeeting/{userId}/{meetingId}")
-    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> getWordsDataByUserAndMeeting(
-            @PathVariable int userId, @PathVariable int meetingId) {
-        return grammarianService.getWordsDataByUserAndMeeting(userId, meetingId);
+    @GetMapping("/getWordsDataByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<List<GrammarianResponseDTO>>> getWordsDataByMeeting(@PathVariable int meetingId) {
+        return grammarianService.getWordsDataByMeeting(meetingId);
     }
 
-    @PutMapping("/updateWordsDataByUserAndMeeting/{userId}/{meetingId}")
-    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> updateWordsDataByUserAndMeeting(
-            @RequestBody GrammarianRequestDTO dto, @PathVariable int userId, @PathVariable int meetingId) {
-        return grammarianService.updateWordsDataByUserAndMeeting(dto, userId, meetingId);
+    @PutMapping("/updateWordsDataByMeeting/{meetingId}/{wordType}")
+    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> updateWordsDataByMeeting(
+            @RequestBody GrammarianRequestDTO dto, @PathVariable int meetingId, @PathVariable String wordType) {
+        return grammarianService.updateWordsDataByMeeting(dto, meetingId, wordType);
     }
 
-    @DeleteMapping("/deleteWordsDataByUserAndMeeting/{userId}/{meetingId}")
-    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> deleteWordsDataByUserAndMeeting(
-            @PathVariable int userId, @PathVariable int meetingId) {
-        return grammarianService.deleteWordsDataByUserAndMeeting(userId, meetingId);
+    @DeleteMapping("/deleteWordsDataByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> deleteWordsDataByMeeting(@PathVariable int meetingId) {
+        return grammarianService.deleteWordsDataByMeeting(meetingId);
     }
 
 }

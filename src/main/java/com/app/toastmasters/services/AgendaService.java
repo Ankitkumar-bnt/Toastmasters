@@ -9,4 +9,8 @@ import java.util.List;
 
 public interface AgendaService {
     ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> addAgendaRows(List<AgendaRequestDTO> agendaRows);
+
+    ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAllAgendaRows();
+
+    ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAgendaRowsByMeeting(int meetingId);
 }

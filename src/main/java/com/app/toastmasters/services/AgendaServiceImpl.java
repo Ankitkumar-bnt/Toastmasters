@@ -5,6 +5,7 @@ import com.app.toastmasters.dto.requestDTO.AgendaRequestDTO;
 import com.app.toastmasters.dto.responseDTO.AgendaResponseDTO;
 import com.app.toastmasters.entity.Agenda;
 import com.app.toastmasters.entity.Meeting;
+import com.app.toastmasters.exceptions.EmptyListException;
 import com.app.toastmasters.exceptions.MeetingNotFoundException;
 import com.app.toastmasters.mapper.AgendaMapper;
 import com.app.toastmasters.repository.AgendaRepository;
@@ -53,6 +54,35 @@ public class AgendaServiceImpl implements AgendaService{
                 new ResponseMessage<List<AgendaResponseDTO>>(HttpStatus.OK, Constant.AGENDA_ROWS_ADDED_SUCCESS, agendaList.stream()
                                 .map(x-> mapper.toDTO(x))
                                 .collect(Collectors.toList()));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
+    @Override
+    public ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAllAgendaRows() {
+        List<Agenda> agendaList = agendaRepository.findAll();
+        if(agendaList == null)
+            throw new EmptyListException(Constant.EMPTY_LIST);
+
+        ResponseMessage<List<AgendaResponseDTO>> responseMessage =
+                new ResponseMessage<List<AgendaResponseDTO>>(HttpStatus.OK, Constant.AGENDA_DISPLAY_SUCCESS, agendaList.stream()
+                        .map(x->mapper.toDTO(x))
+                        .collect(Collectors.toList()));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
+    @Override
+    public ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAgendaRowsByMeeting(int meetingId) {
+        Optional<Meeting> meeting = meetingRepository.findById(meetingId);
+        if (meeting.isEmpty())
+            throw new MeetingNotFoundException(Constant.MEETING_NOT_FOUND);
+        Meeting meetingData = meeting.get();
+
+        List<Agenda> meetingList = agendaRepository.findAllByMeeting(meetingData);
+
+        ResponseMessage<List<AgendaResponseDTO>> responseMessage =
+                new ResponseMessage<List<AgendaResponseDTO>>(HttpStatus.OK, Constant.AGENDA_DISPLAY_SUCCESS, meetingList.stream()
+                        .map(x->mapper.toDTO(x))
+                        .collect(Collectors.toList()));
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 }

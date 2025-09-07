@@ -3,11 +3,15 @@ package com.app.toastmasters.services;
 import com.app.toastmasters.constants.Constant;
 import com.app.toastmasters.dto.requestDTO.GrammarianRequestDTO;
 import com.app.toastmasters.dto.responseDTO.GrammarianResponseDTO;
+import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.agenda.Grammarian;
+import com.app.toastmasters.exceptions.EmptyListException;
 import com.app.toastmasters.exceptions.EmptyObjectException;
+import com.app.toastmasters.exceptions.MeetingNotFoundException;
 import com.app.toastmasters.mapper.GrammarianMapper;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.repository.GrammarianRepository;
+import com.app.toastmasters.repository.MeetingRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -21,10 +25,12 @@ public class GrammarianServiceImpl implements GrammarianService {
 
     private final GrammarianRepository grammarianRepository;
     private final GrammarianMapper grammarianMapper;
+    private final MeetingRepository meetingRepository;
 
-    public GrammarianServiceImpl(GrammarianRepository grammarianRepository, GrammarianMapper grammarianMapper) {
+    public GrammarianServiceImpl(GrammarianRepository grammarianRepository, GrammarianMapper grammarianMapper, MeetingRepository meetingRepository) {
         this.grammarianRepository = grammarianRepository;
         this.grammarianMapper = grammarianMapper;
+        this.meetingRepository = meetingRepository;
     }
 
     @Override
@@ -51,40 +57,49 @@ public class GrammarianServiceImpl implements GrammarianService {
         ResponseMessage<List<GrammarianResponseDTO>> responseMessage =
                 new ResponseMessage<List<GrammarianResponseDTO>>(HttpStatus.OK, Constant.GRAMMARIAN_FOUND_ALL, dtoList);
 
-        return ResponseEntity.ok(responseMessage);
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> getWordsDataByUserAndMeeting(int userId, int meetingId) {
-        Optional<Grammarian> optional = grammarianRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
+    public ResponseEntity<ResponseMessage<List<GrammarianResponseDTO>>> getWordsDataByMeeting(int meetingId) {
+        Optional<Meeting> meeting = meetingRepository.findById(meetingId);
+        if(meeting.isEmpty())
+            throw new MeetingNotFoundException(Constant.MEETING_NOT_FOUND);
 
-        if (optional.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ResponseMessage<>(HttpStatus.NOT_FOUND, Constant.GRAMMARIAN_NOT_FOUND, null));
+        List<Grammarian> grammarians = grammarianRepository.findByMeeting(meeting.get());
+
+        if (grammarians.isEmpty()) {
+            throw new EmptyObjectException(Constant.GRAMMARIAN_NOT_FOUND);
         }
 
-        GrammarianResponseDTO dto = grammarianMapper.toResponseDTO(optional.get());
-        return ResponseEntity.ok(new ResponseMessage<>(HttpStatus.OK, Constant.GRAMMARIAN_FOUND, dto));
+        ResponseMessage<List<GrammarianResponseDTO>> responseMessage =
+                new ResponseMessage<List<GrammarianResponseDTO>>(HttpStatus.OK, Constant.GRAMMARIAN_FOUND,
+                        grammarians.stream().map(x->grammarianMapper.toResponseDTO(x))
+                                .collect(Collectors.toList()));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> updateWordsDataByUserAndMeeting(GrammarianRequestDTO dto, int userId, int meetingId) {
+    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> updateWordsDataByMeeting(GrammarianRequestDTO dto, int meetingId, String wordType) {
         if (dto == null)
             throw new EmptyObjectException(Constant.EMPTY_OBJECT);
 
-        Optional<Grammarian> optional = grammarianRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
+        List<Grammarian> grammarian = grammarianRepository.findByMeeting_MeetingId(meetingId);
 
-        if (optional.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ResponseMessage<>(HttpStatus.NOT_FOUND, Constant.GRAMMARIAN_UPDATE_FAIL, null));
+        if (grammarian.isEmpty()) {
+            throw new EmptyListException(Constant.EMPTY_LIST);
         }
+        Grammarian grammarianData = null;
 
-        Grammarian existing = optional.get();
+        if(grammarian.getFirst().getWordType().equals(wordType))
+            grammarianData = grammarian.getFirst();
+        else
+            grammarianData = grammarian.getLast();
 
         Grammarian updatedEntity = grammarianMapper.toEntity(dto);
-        updatedEntity.setGrammarianId(existing.getGrammarianId());
-        updatedEntity.setUser(existing.getUser());
-        updatedEntity.setMeeting(existing.getMeeting());
+        updatedEntity.setGrammarianId(grammarianData.getGrammarianId());
+        updatedEntity.setUser(grammarianData.getUser());
+        updatedEntity.setMeeting(grammarianData.getMeeting());
 
         Grammarian updated = grammarianRepository.save(updatedEntity);
 
@@ -94,15 +109,14 @@ public class GrammarianServiceImpl implements GrammarianService {
 
 
     @Override
-    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> deleteWordsDataByUserAndMeeting(int userId, int meetingId) {
-        Optional<Grammarian> optional = grammarianRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
+    public ResponseEntity<ResponseMessage<GrammarianResponseDTO>> deleteWordsDataByMeeting(int meetingId) {
+        List<Grammarian> grammarians = grammarianRepository.findByMeeting_MeetingId(meetingId);
 
-        if (optional.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ResponseMessage<>(HttpStatus.NOT_FOUND, Constant.GRAMMARIAN_DELETE_FAIL, null));
+        if (grammarians.isEmpty()) {
+            throw new EmptyListException(Constant.EMPTY_LIST);
         }
 
-        grammarianRepository.delete(optional.get());
+        grammarianRepository.deleteAllByMeeting_MeetingId(meetingId);
 
         return ResponseEntity.ok(new ResponseMessage<>(HttpStatus.OK, Constant.GRAMMARIAN_DELETE_SUCCESS, null));
     }
