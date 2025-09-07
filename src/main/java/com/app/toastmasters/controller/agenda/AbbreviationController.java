@@ -42,13 +42,13 @@ public class AbbreviationController {
         return abbreviationService.getAbbreviationsById(abbreviationId);
     }
 
-    @PutMapping("/updateAbbreviationsById")
+    @PutMapping("/updateAbbreviationsById/{abbreviationId}")
     public ResponseEntity<ResponseMessage<AbbreviationsResponseDTO>> updateAbbreviationsById(
             @RequestBody AbbreviationsRequestDTO dto, @PathVariable int abbreviationId){
         return abbreviationService.updateAbbreviationsById(dto, abbreviationId);
     }
 
-    @DeleteMapping("/deleteAbbreviationsById")
+    @DeleteMapping("/deleteAbbreviationsById/{abbreviationId}")
     public ResponseEntity<ResponseMessage<AbbreviationsResponseDTO>> deleteAbbreviationsById(@PathVariable int abbreviationId){
         return abbreviationService.deleteAbbreviationsById(abbreviationId);
     }
