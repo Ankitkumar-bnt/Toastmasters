@@ -1,8 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Dropdown, Table, Badge, Alert, Spinner } from 'react-bootstrap';
+import { Container, Row, Col, Card, Dropdown, Table, Badge, Alert, Spinner, Modal, Button, Form } from 'react-bootstrap';
 import { Calendar, Clock, Users, BookOpen, Award } from 'lucide-react';
 import { getAllUpcomingMeetings } from '../../api/MeetingApi';
-import { getAgenda } from '../../api/AgendaJoinApi';
+import { 
+  getAgenda, 
+  getAllStaticInfo, 
+  updateStaticInfoById,
+  getAllClubOfficer,
+  addClubOfficer,
+  updateClubOfficerById,
+  deleteClubOfficerById,
+  getWordsDataByMeeting,
+  updateWordsDataByUserAndMeeting,
+  getAllAbbreviations,
+  updateAbbreviationsById
+} from '../../api/AgendaJoinApi';
 import { getUserById } from '../../api/UserApi';
 import toastmastersLogo from '../../assets/img/toastmastersLogo.png';
 
@@ -14,6 +26,30 @@ const AgendaView = () => {
   const [meetingsLoading, setMeetingsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [userCache, setUserCache] = useState({});
+  const [showClubInfoModal, setShowClubInfoModal] = useState(false);
+  const [staticInfoData, setStaticInfoData] = useState([]);
+  const [editingInfo, setEditingInfo] = useState({});
+  const [updating, setUpdating] = useState(false);
+  
+  // Club Officers Modal States
+  const [showOfficersModal, setShowOfficersModal] = useState(false);
+  const [showAddOfficerModal, setShowAddOfficerModal] = useState(false);
+  const [officersData, setOfficersData] = useState([]);
+  const [editingOfficer, setEditingOfficer] = useState(null);
+  const [newOfficer, setNewOfficer] = useState({ leadershipName: '', userId: '' });
+  
+  // WOD/POD Modal States
+  const [showWODModal, setShowWODModal] = useState(false);
+  const [showPODModal, setShowPODModal] = useState(false);
+  const [wodData, setWODData] = useState([]);
+  const [podData, setPODData] = useState([]);
+  const [editingWOD, setEditingWOD] = useState({});
+  const [editingPOD, setEditingPOD] = useState({});
+  
+  // Abbreviations Modal States
+  const [showAbbreviationsModal, setShowAbbreviationsModal] = useState(false);
+  const [abbreviationsData, setAbbreviationsData] = useState([]);
+  const [editingAbbreviations, setEditingAbbreviations] = useState([]);
 
   useEffect(() => {
     loadMeetings();
@@ -66,6 +102,338 @@ const AgendaView = () => {
       setUserCache(prev => ({ ...prev, [userId]: fallbackUser }));
       return fallbackUser;
     }
+  };
+
+  const handleEditClubInfo = async () => {
+    try {
+      const response = await getAllStaticInfo();
+      const staticInfo = response.data.data || [];
+      setStaticInfoData(staticInfo);
+      
+      // Create an object with infoKey as keys for easy editing
+      const editingObj = {};
+      staticInfo.forEach(item => {
+        editingObj[item.infoKey] = item.infoValue;
+      });
+      
+      setEditingInfo(editingObj);
+      setShowClubInfoModal(true);
+    } catch (err) {
+      console.error('Error loading static info:', err);
+      setError('Failed to load club information');
+    }
+  };
+
+  const handleSaveClubInfo = async () => {
+    setUpdating(true);
+    try {
+      // Update each static info item
+      const updatePromises = staticInfoData.map(async (item) => {
+        if (editingInfo[item.infoKey] !== item.infoValue && item.staticInfoId) {
+          await updateStaticInfoById(item.staticInfoId, {
+            infoKey: item.infoKey,
+            infoValue: editingInfo[item.infoKey]
+          });
+        }
+      });
+      
+      await Promise.all(updatePromises);
+      
+      // Reload the agenda data to reflect changes
+      if (selectedMeeting) {
+        const response = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(response.data.data);
+      }
+      
+      setShowClubInfoModal(false);
+      // toast.success('Club information updated successfully'); // Commented out as toast is not imported
+    } catch (err) {
+      console.error('Error updating static info:', err);
+      setError('Failed to update club information');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleInputChange = (key, value) => {
+    setEditingInfo(prev => ({
+      ...prev,
+      [key]: value
+    }));
+  };
+
+  // ================== CLUB OFFICERS HANDLERS ==================
+  
+  const handleEditOfficers = async () => {
+    try {
+      const response = await getAllClubOfficer();
+      setOfficersData(response.data.data || []);
+      setShowOfficersModal(true);
+    } catch (err) {
+      console.error('Error loading officers:', err);
+      setError('Failed to load club officers');
+    }
+  };
+
+  const handleUpdateOfficer = async (officer) => {
+    try {
+      await updateClubOfficerById(officer.officerId, {
+        leadershipName: officer.leadershipName,
+        userId: officer.userId
+      });
+      
+      // Reload officers data
+      const response = await getAllClubOfficer();
+      setOfficersData(response.data.data || []);
+      
+      // Reload agenda data to reflect changes
+      if (selectedMeeting) {
+        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(agendaResponse.data.data);
+      }
+      
+      setEditingOfficer(null);
+    } catch (err) {
+      console.error('Error updating officer:', err);
+      setError('Failed to update officer');
+    }
+  };
+
+  const handleDeleteOfficer = async (officerId) => {
+    try {
+      await deleteClubOfficerById(officerId);
+      
+      // Reload officers data
+      const response = await getAllClubOfficer();
+      setOfficersData(response.data.data || []);
+      
+      // Reload agenda data to reflect changes
+      if (selectedMeeting) {
+        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(agendaResponse.data.data);
+      }
+    } catch (err) {
+      console.error('Error deleting officer:', err);
+      setError('Failed to delete officer');
+    }
+  };
+
+  const handleAddOfficer = async () => {
+    try {
+      await addClubOfficer(newOfficer);
+      
+      // Reload officers data
+      const response = await getAllClubOfficer();
+      setOfficersData(response.data.data || []);
+      
+      // Reload agenda data to reflect changes
+      if (selectedMeeting) {
+        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(agendaResponse.data.data);
+      }
+      
+      setNewOfficer({ leadershipName: '', userId: '' });
+      setShowAddOfficerModal(false);
+    } catch (err) {
+      console.error('Error adding officer:', err);
+      setError('Failed to add officer');
+    }
+  };
+
+  // ================== WOD/POD HANDLERS ==================
+  
+  const handleEditWOD = async () => {
+    if (!selectedMeeting) return;
+    
+    try {
+      const response = await getWordsDataByMeeting(selectedMeeting.meetingId);
+      const wordsDataList = response.data.data || [];
+      
+      // Filter for WOD items
+      const wodItems = wordsDataList.filter(item => item.wordType?.toUpperCase() === 'WOD');
+      
+      if (wodItems.length > 0) {
+        setWODData(wodItems);
+        
+        // Create editing object
+        const editingObj = {};
+        wodItems.forEach(item => {
+          editingObj[item.grammarianId] = {
+            word: item.word,
+            meaning: item.meaning,
+            example: item.example
+          };
+        });
+        
+        setEditingWOD(editingObj);
+        setShowWODModal(true);
+      } else {
+        setError('No Word of the Day data found for this meeting');
+      }
+    } catch (err) {
+      console.error('Error loading WOD data:', err);
+      if (err.code === 'ERR_NETWORK' || err.message.includes('CORS')) {
+        setError('CORS Error: Backend server needs CORS configuration for http://localhost:5173. Please configure CORS on your backend server.');
+      } else {
+        setError('Failed to load Word of the Day data');
+      }
+    }
+  };
+
+  const handleEditPOD = async () => {
+    if (!selectedMeeting) return;
+    
+    try {
+      const response = await getWordsDataByMeeting(selectedMeeting.meetingId);
+      const wordsDataList = response.data.data || [];
+      
+      // Filter for POD items
+      const podItems = wordsDataList.filter(item => item.wordType?.toUpperCase() === 'POD');
+      
+      if (podItems.length > 0) {
+        setPODData(podItems);
+        
+        // Create editing object
+        const editingObj = {};
+        podItems.forEach(item => {
+          editingObj[item.grammarianId] = {
+            word: item.word,
+            meaning: item.meaning,
+            example: item.example
+          };
+        });
+        
+        setEditingPOD(editingObj);
+        setShowPODModal(true);
+      } else {
+        setError('No Phrase of the Day data found for this meeting');
+      }
+    } catch (err) {
+      console.error('Error loading POD data:', err);
+      if (err.code === 'ERR_NETWORK' || err.message.includes('CORS')) {
+        setError('CORS Error: Backend server needs CORS configuration for http://localhost:5173. Please configure CORS on your backend server.');
+      } else {
+        setError('Failed to load Phrase of the Day data');
+      }
+    }
+  };
+
+  const handleSaveWOD = async () => {
+    setUpdating(true);
+    try {
+      const updatePromises = wodData.map(async (item) => {
+        const editedData = editingWOD[item.grammarianId];
+        if (editedData) {
+          await updateWordsDataByUserAndMeeting(item.userId, selectedMeeting.meetingId, {
+            word: editedData.word,
+            meaning: editedData.meaning,
+            example: editedData.example,
+            wordType: 'WOD'
+          });
+        }
+      });
+      
+      await Promise.all(updatePromises);
+      
+      // Reload agenda data
+      if (selectedMeeting) {
+        const response = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(response.data.data);
+      }
+      
+      setShowWODModal(false);
+    } catch (err) {
+      console.error('Error updating WOD:', err);
+      setError('Failed to update Word of the Day');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleSavePOD = async () => {
+    setUpdating(true);
+    try {
+      const updatePromises = podData.map(async (item) => {
+        const editedData = editingPOD[item.grammarianId];
+        if (editedData) {
+          await updateWordsDataByUserAndMeeting(item.userId, selectedMeeting.meetingId, {
+            word: editedData.word,
+            meaning: editedData.meaning,
+            example: editedData.example,
+            wordType: 'POD'
+          });
+        }
+      });
+      
+      await Promise.all(updatePromises);
+      
+      // Reload agenda data
+      if (selectedMeeting) {
+        const response = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(response.data.data);
+      }
+      
+      setShowPODModal(false);
+    } catch (err) {
+      console.error('Error updating POD:', err);
+      setError('Failed to update Phrase of the Day');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // ================== ABBREVIATIONS HANDLERS ==================
+  
+  const handleEditAbbreviations = async () => {
+    try {
+      const response = await getAllAbbreviations();
+      const abbreviations = response.data.data || [];
+      
+      setAbbreviationsData(abbreviations);
+      setEditingAbbreviations([...abbreviations]);
+      setShowAbbreviationsModal(true);
+    } catch (err) {
+      console.error('Error loading abbreviations:', err);
+      setError('Failed to load abbreviations');
+    }
+  };
+
+  const handleSaveAbbreviations = async () => {
+    setUpdating(true);
+    try {
+      const updatePromises = editingAbbreviations.map(async (item, index) => {
+        const originalItem = abbreviationsData[index];
+        if (originalItem && (item.abbreviation !== originalItem.abbreviation || item.meaning !== originalItem.meaning)) {
+          await updateAbbreviationsById(originalItem.abbreviationId, {
+            abbreviation: item.abbreviation,
+            meaning: item.meaning
+          });
+        }
+      });
+      
+      await Promise.all(updatePromises);
+      
+      // Reload agenda data
+      if (selectedMeeting) {
+        const response = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(response.data.data);
+      }
+      
+      setShowAbbreviationsModal(false);
+    } catch (err) {
+      console.error('Error updating abbreviations:', err);
+      setError('Failed to update abbreviations');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleAbbreviationChange = (index, field, value) => {
+    setEditingAbbreviations(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
   };
 
   // ================== RENDERERS ==================
@@ -145,7 +513,7 @@ const AgendaView = () => {
             <Users className="me-2" size={20} />
             Club Officers
           </h5>
-          <button className="btn btn-sm btn-light">Edit</button>
+          <button className="btn btn-sm btn-light" onClick={handleEditOfficers}>Edit</button>
         </Card.Header>
         <Card.Body>
           <Row>
@@ -223,7 +591,7 @@ const AgendaView = () => {
             <Clock className="me-2" size={20} />
             Meeting Agenda
           </h5>
-          <button className="btn btn-sm btn-light">Edit</button>
+          <button className="btn btn-sm btn-light" onClick={() => window.location.href = '/agenda-edit'}>Edit</button>
         </Card.Header>
         <Card.Body>
           <Table responsive bordered hover>
@@ -276,7 +644,7 @@ const AgendaView = () => {
                 <BookOpen className="me-2" size={20} />
                 Word of the Day (WOD)
               </h5>
-              <button className="btn btn-sm btn-light">Edit</button>
+              <button className="btn btn-sm btn-light" onClick={handleEditWOD}>Edit</button>
             </Card.Header>
             <Card.Body>
               {wodItems.length > 0 ? (
@@ -296,7 +664,7 @@ const AgendaView = () => {
                 <BookOpen className="me-2" size={20} />
                 Phrase of the Day (POD)
               </h5>
-              <button className="btn btn-sm btn-light">Edit</button>
+              <button className="btn btn-sm btn-light" onClick={handleEditPOD}>Edit</button>
             </Card.Header>
             <Card.Body>
               {podItems.length > 0 ? (
@@ -321,7 +689,7 @@ const AgendaView = () => {
             <Card className="mb-4">
               <Card.Header className="bg-secondary text-white d-flex justify-content-between align-items-center">
                 <h5 className="mb-0">Abbreviations</h5>
-                <button className="btn btn-sm btn-light">Edit</button>
+                <button className="btn btn-sm btn-light" onClick={handleEditAbbreviations}>Edit</button>
               </Card.Header>
               <Card.Body>
                 <p className="text-muted">No abbreviations available</p>
@@ -381,10 +749,9 @@ const AgendaView = () => {
           <Award className="me-2" size={20} />
           Club Information
         </h5>
-        <button className="btn btn-sm btn-light">Edit</button>
+        <button className="btn btn-sm btn-light" onClick={handleEditClubInfo}>Edit</button>
       </Card.Header>
       <Card.Body className="text-center">
-
         <h4 className="mb-2">{getStaticInfo('Club Name') || 'Toastmasters Club'}</h4>
         <p className="text-muted mb-3">
           <strong>Club # {getStaticInfo('Club Id') || 'N/A'}</strong> |{" "}
@@ -415,8 +782,384 @@ const AgendaView = () => {
           </p>
         </div>
       </Card.Body>
-
     </Card>
+  );
+
+  const renderClubInfoModal = () => (
+    <Modal show={showClubInfoModal} onHide={() => setShowClubInfoModal(false)} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>Edit Club Information</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {staticInfoData.length > 0 ? (
+          <Form>
+            {staticInfoData.map((item, index) => (
+              <Form.Group className="mb-3" key={`static-info-${item.staticInfoId || index}`}>
+                <Form.Label>
+                  <strong>{item.infoKey.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</strong>
+                </Form.Label>
+                <Form.Control
+                  type="text"
+                  value={editingInfo[item.infoKey] || ''}
+                  onChange={(e) => handleInputChange(item.infoKey, e.target.value)}
+                />
+              </Form.Group>
+            ))}
+          </Form>
+        ) : (
+          <p>No club information available to edit.</p>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowClubInfoModal(false)}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={handleSaveClubInfo} disabled={updating}>
+          {updating ? <Spinner animation="border" size="sm" /> : 'Save Changes'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
+  const renderOfficersModal = () => (
+    <Modal show={showOfficersModal} onHide={() => setShowOfficersModal(false)} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>
+          Edit Club Officers
+          <Button 
+            variant="success" 
+            size="sm" 
+            className="ms-3"
+            onClick={() => setShowAddOfficerModal(true)}
+          >
+            Add Officer
+          </Button>
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {officersData.length > 0 ? (
+          <div>
+            {officersData.map((officer) => (
+              <div key={officer.officerId} className="mb-3 p-3 border rounded">
+                {editingOfficer?.officerId === officer.officerId ? (
+                  <Form>
+                    <Row>
+                      <Col md={6}>
+                        <Form.Group className="mb-2">
+                          <Form.Label>Leadership Position</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={editingOfficer.leadershipName}
+                            onChange={(e) => setEditingOfficer({...editingOfficer, leadershipName: e.target.value})}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-2">
+                          <Form.Label>User ID</Form.Label>
+                          <Form.Control
+                            type="number"
+                            value={editingOfficer.userId}
+                            onChange={(e) => setEditingOfficer({...editingOfficer, userId: parseInt(e.target.value)})}
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                    <div className="mt-2">
+                      <Button 
+                        variant="success" 
+                        size="sm" 
+                        className="me-2"
+                        onClick={() => handleUpdateOfficer(editingOfficer)}
+                      >
+                        Save
+                      </Button>
+                      <Button 
+                        variant="secondary" 
+                        size="sm"
+                        onClick={() => setEditingOfficer(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </Form>
+                ) : (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>{officer.leadershipName}</strong>
+                      <br />
+                      <small className="text-muted">User ID: {officer.userId}</small>
+                    </div>
+                    <div>
+                      <Button 
+                        variant="outline-primary" 
+                        size="sm" 
+                        className="me-2"
+                        onClick={() => setEditingOfficer(officer)}
+                      >
+                        Edit
+                      </Button>
+                      <Button 
+                        variant="outline-danger" 
+                        size="sm"
+                        onClick={() => handleDeleteOfficer(officer.officerId)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p>No club officers available.</p>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowOfficersModal(false)}>
+          Close
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
+  const renderAddOfficerModal = () => (
+    <Modal show={showAddOfficerModal} onHide={() => setShowAddOfficerModal(false)}>
+      <Modal.Header closeButton>
+        <Modal.Title>Add New Officer</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form>
+          <Form.Group className="mb-3">
+            <Form.Label>Leadership Position</Form.Label>
+            <Form.Control
+              type="text"
+              value={newOfficer.leadershipName}
+              onChange={(e) => setNewOfficer({...newOfficer, leadershipName: e.target.value})}
+              placeholder="Enter leadership position"
+            />
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>User ID</Form.Label>
+            <Form.Control
+              type="number"
+              value={newOfficer.userId}
+              onChange={(e) => setNewOfficer({...newOfficer, userId: e.target.value})}
+              placeholder="Enter user ID"
+            />
+          </Form.Group>
+        </Form>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowAddOfficerModal(false)}>
+          Cancel
+        </Button>
+        <Button 
+          variant="primary" 
+          onClick={handleAddOfficer}
+          disabled={!newOfficer.leadershipName || !newOfficer.userId}
+        >
+          Add Officer
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
+  const renderWODModal = () => (
+    <Modal show={showWODModal} onHide={() => setShowWODModal(false)} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>Edit Word of the Day</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {wodData.length > 0 ? (
+          <Form>
+            {wodData.map((item) => (
+              <div key={item.grammarianId} className="mb-4 p-3 border rounded">
+                <h6>Word Entry {item.grammarianId}</h6>
+                <Form.Group className="mb-2">
+                  <Form.Label>Word</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={editingWOD[item.grammarianId]?.word || ''}
+                    onChange={(e) => setEditingWOD(prev => ({
+                      ...prev,
+                      [item.grammarianId]: {
+                        ...prev[item.grammarianId],
+                        word: e.target.value
+                      }
+                    }))}
+                  />
+                </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label>Meaning</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={editingWOD[item.grammarianId]?.meaning || ''}
+                    onChange={(e) => setEditingWOD(prev => ({
+                      ...prev,
+                      [item.grammarianId]: {
+                        ...prev[item.grammarianId],
+                        meaning: e.target.value
+                      }
+                    }))}
+                  />
+                </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label>Example</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={editingWOD[item.grammarianId]?.example || ''}
+                    onChange={(e) => setEditingWOD(prev => ({
+                      ...prev,
+                      [item.grammarianId]: {
+                        ...prev[item.grammarianId],
+                        example: e.target.value
+                      }
+                    }))}
+                  />
+                </Form.Group>
+              </div>
+            ))}
+          </Form>
+        ) : (
+          <p>No Word of the Day data available.</p>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowWODModal(false)}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={handleSaveWOD} disabled={updating}>
+          {updating ? <Spinner animation="border" size="sm" /> : 'Save Changes'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
+  const renderPODModal = () => (
+    <Modal show={showPODModal} onHide={() => setShowPODModal(false)} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>Edit Phrase of the Day</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {podData.length > 0 ? (
+          <Form>
+            {podData.map((item) => (
+              <div key={item.grammarianId} className="mb-4 p-3 border rounded">
+                <h6>Phrase Entry {item.grammarianId}</h6>
+                <Form.Group className="mb-2">
+                  <Form.Label>Phrase</Form.Label>
+                  <Form.Control
+                    type="text"
+                    value={editingPOD[item.grammarianId]?.word || ''}
+                    onChange={(e) => setEditingPOD(prev => ({
+                      ...prev,
+                      [item.grammarianId]: {
+                        ...prev[item.grammarianId],
+                        word: e.target.value
+                      }
+                    }))}
+                  />
+                </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label>Meaning</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={editingPOD[item.grammarianId]?.meaning || ''}
+                    onChange={(e) => setEditingPOD(prev => ({
+                      ...prev,
+                      [item.grammarianId]: {
+                        ...prev[item.grammarianId],
+                        meaning: e.target.value
+                      }
+                    }))}
+                  />
+                </Form.Group>
+                <Form.Group className="mb-2">
+                  <Form.Label>Example</Form.Label>
+                  <Form.Control
+                    as="textarea"
+                    rows={2}
+                    value={editingPOD[item.grammarianId]?.example || ''}
+                    onChange={(e) => setEditingPOD(prev => ({
+                      ...prev,
+                      [item.grammarianId]: {
+                        ...prev[item.grammarianId],
+                        example: e.target.value
+                      }
+                    }))}
+                  />
+                </Form.Group>
+              </div>
+            ))}
+          </Form>
+        ) : (
+          <p>No Phrase of the Day data available.</p>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowPODModal(false)}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={handleSavePOD} disabled={updating}>
+          {updating ? <Spinner animation="border" size="sm" /> : 'Save Changes'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
+  const renderAbbreviationsModal = () => (
+    <Modal show={showAbbreviationsModal} onHide={() => setShowAbbreviationsModal(false)} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>Edit Abbreviations</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {editingAbbreviations.length > 0 ? (
+          <Form>
+            {editingAbbreviations.map((item, index) => (
+              <div key={index} className="mb-3 p-3 border rounded">
+                <Row>
+                  <Col md={4}>
+                    <Form.Group>
+                      <Form.Label>Abbreviation</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={item.abbreviation || ''}
+                        onChange={(e) => handleAbbreviationChange(index, 'abbreviation', e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+                  <Col md={8}>
+                    <Form.Group>
+                      <Form.Label>Meaning</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={item.meaning || ''}
+                        onChange={(e) => handleAbbreviationChange(index, 'meaning', e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </div>
+            ))}
+          </Form>
+        ) : (
+          <p>No abbreviations available to edit.</p>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowAbbreviationsModal(false)}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={handleSaveAbbreviations} disabled={updating}>
+          {updating ? <Spinner animation="border" size="sm" /> : 'Save Changes'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
   );
 
   return (
@@ -497,6 +1240,13 @@ const AgendaView = () => {
           Please select speaker and grammarian to load agenda data.
         </Alert>
       )}
+
+      {renderClubInfoModal()}
+      {renderOfficersModal()}
+      {renderAddOfficerModal()}
+      {renderWODModal()}
+      {renderPODModal()}
+      {renderAbbreviationsModal()}
     </Container>
   );
 };
