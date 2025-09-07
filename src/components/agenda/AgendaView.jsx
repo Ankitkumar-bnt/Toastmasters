@@ -13,7 +13,9 @@ import {
   getWordsDataByMeeting,
   updateWordsDataByUserAndMeeting,
   getAllAbbreviations,
-  updateAbbreviationsById
+  addAbbreviation,
+  updateAbbreviationsById,
+  deleteAbbreviationsById
 } from '../../api/AgendaJoinApi';
 import { getUserById } from '../../api/UserApi';
 import toastmastersLogo from '../../assets/img/toastmastersLogo.png';
@@ -48,8 +50,10 @@ const AgendaView = () => {
   
   // Abbreviations Modal States
   const [showAbbreviationsModal, setShowAbbreviationsModal] = useState(false);
+  const [showAddAbbreviationModal, setShowAddAbbreviationModal] = useState(false);
   const [abbreviationsData, setAbbreviationsData] = useState([]);
   const [editingAbbreviations, setEditingAbbreviations] = useState([]);
+  const [newAbbreviation, setNewAbbreviation] = useState({ abbreviation: '', meaning: '' });
 
   useEffect(() => {
     loadMeetings();
@@ -436,6 +440,49 @@ const AgendaView = () => {
     });
   };
 
+  const handleDeleteAbbreviation = async (abbreviationId, index) => {
+    try {
+      await deleteAbbreviationsById(abbreviationId);
+      
+      // Remove from local state
+      setEditingAbbreviations(prev => prev.filter((_, i) => i !== index));
+      setAbbreviationsData(prev => prev.filter((_, i) => i !== index));
+      
+      // Reload agenda data to reflect changes
+      if (selectedMeeting) {
+        const response = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(response.data.data);
+      }
+    } catch (err) {
+      console.error('Error deleting abbreviation:', err);
+      setError('Failed to delete abbreviation');
+    }
+  };
+
+  const handleAddAbbreviation = async () => {
+    try {
+      await addAbbreviation(newAbbreviation);
+      
+      // Reload abbreviations data
+      const response = await getAllAbbreviations();
+      const abbreviations = response.data.data || [];
+      setAbbreviationsData(abbreviations);
+      setEditingAbbreviations([...abbreviations]);
+      
+      // Reload agenda data to reflect changes
+      if (selectedMeeting) {
+        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
+        setAgendaData(agendaResponse.data.data);
+      }
+      
+      setNewAbbreviation({ abbreviation: '', meaning: '' });
+      setShowAddAbbreviationModal(false);
+    } catch (err) {
+      console.error('Error adding abbreviation:', err);
+      setError('Failed to add abbreviation');
+    }
+  };
+
   // ================== RENDERERS ==================
 
   const formatMeetingTitle = (meeting) => {
@@ -710,7 +757,7 @@ const AgendaView = () => {
           <Card className="mb-4">
             <Card.Header className="bg-secondary text-white d-flex justify-content-between align-items-center">
               <h5 className="mb-0">Abbreviations</h5>
-              <button className="btn btn-sm btn-light">Edit</button>
+              <button className="btn btn-sm btn-light" onClick={handleEditAbbreviations}>Edit</button>
             </Card.Header>
             <Card.Body>
               <Row>
@@ -1115,7 +1162,17 @@ const AgendaView = () => {
   const renderAbbreviationsModal = () => (
     <Modal show={showAbbreviationsModal} onHide={() => setShowAbbreviationsModal(false)} size="lg">
       <Modal.Header closeButton>
-        <Modal.Title>Edit Abbreviations</Modal.Title>
+        <Modal.Title>
+          Edit Abbreviations
+          <Button 
+            variant="success" 
+            size="sm" 
+            className="ms-3"
+            onClick={() => setShowAddAbbreviationModal(true)}
+          >
+            Add Abbreviation
+          </Button>
+        </Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {editingAbbreviations.length > 0 ? (
@@ -1133,7 +1190,7 @@ const AgendaView = () => {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={8}>
+                  <Col md={6}>
                     <Form.Group>
                       <Form.Label>Meaning</Form.Label>
                       <Form.Control
@@ -1142,6 +1199,16 @@ const AgendaView = () => {
                         onChange={(e) => handleAbbreviationChange(index, 'meaning', e.target.value)}
                       />
                     </Form.Group>
+                  </Col>
+                  <Col md={2} className="d-flex align-items-end">
+                    <Button 
+                      variant="outline-danger" 
+                      size="sm"
+                      onClick={() => handleDeleteAbbreviation(item.abbreviationId, index)}
+                      className="w-100"
+                    >
+                      Delete
+                    </Button>
                   </Col>
                 </Row>
               </div>
@@ -1157,6 +1224,48 @@ const AgendaView = () => {
         </Button>
         <Button variant="primary" onClick={handleSaveAbbreviations} disabled={updating}>
           {updating ? <Spinner animation="border" size="sm" /> : 'Save Changes'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+
+  const renderAddAbbreviationModal = () => (
+    <Modal show={showAddAbbreviationModal} onHide={() => setShowAddAbbreviationModal(false)}>
+      <Modal.Header closeButton>
+        <Modal.Title>Add New Abbreviation</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form>
+          <Form.Group className="mb-3">
+            <Form.Label>Abbreviation</Form.Label>
+            <Form.Control
+              type="text"
+              value={newAbbreviation.abbreviation}
+              onChange={(e) => setNewAbbreviation({...newAbbreviation, abbreviation: e.target.value})}
+              placeholder="Enter abbreviation (e.g., TM, CC, DTM)"
+            />
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Meaning</Form.Label>
+            <Form.Control
+              type="text"
+              value={newAbbreviation.meaning}
+              onChange={(e) => setNewAbbreviation({...newAbbreviation, meaning: e.target.value})}
+              placeholder="Enter the full meaning"
+            />
+          </Form.Group>
+        </Form>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={() => setShowAddAbbreviationModal(false)}>
+          Cancel
+        </Button>
+        <Button 
+          variant="primary" 
+          onClick={handleAddAbbreviation}
+          disabled={!newAbbreviation.abbreviation || !newAbbreviation.meaning}
+        >
+          Add Abbreviation
         </Button>
       </Modal.Footer>
     </Modal>
@@ -1247,6 +1356,7 @@ const AgendaView = () => {
       {renderWODModal()}
       {renderPODModal()}
       {renderAbbreviationsModal()}
+      {renderAddAbbreviationModal()}
     </Container>
   );
 };
