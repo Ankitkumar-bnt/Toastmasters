@@ -17,3 +17,7 @@ export const updateMember = async (updatedData) => {
 export const deleteUserById = async (userId) => {
   return await axios.delete(`${API_URL}/deleteMember/${userId}`);
 };
+
+export const getUserById = async (userId) => {
+  return await axios.get(`${API_URL}/getUserById/${userId}`);
+};

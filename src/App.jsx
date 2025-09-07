@@ -13,7 +13,8 @@ import MeetingsList from './components/meetings/MeetingsList';
 import MeetingDetails from './components/meetings/MeetingDetails';
 import DashboardStats from './components/admin/dashboard/DashboardStats';
 import AssignRole from './components/assign-role/AssignRole';
-import { Users, UserPlus, Calendar, Settings } from 'lucide-react';
+import AgendaView from './components/agenda/AgendaView';
+import { Users, UserPlus, Calendar, FileText } from 'lucide-react';
 import './App.css';
 
 function App({ onLogout }) {
@@ -297,11 +298,11 @@ function App({ onLogout }) {
           </Card>
         </Col>
         <Col md={6} lg={3}>
-          <Card className="border-0 shadow-sm h-100 hover-card" style={{ cursor: 'pointer' }}>
+          <Card className="border-0 shadow-sm h-100 hover-card" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('agenda')}>
             <Card.Body className="text-center">
-              <Settings size={48} className="text-warning mb-3" />
-              <h5>Settings</h5>
-              <p className="text-muted mb-0">Configure system settings</p>
+              <FileText size={48} className="text-warning mb-3" />
+              <h5>Agenda</h5>
+              <p className="text-muted mb-0">View meeting agendas</p>
             </Card.Body>
           </Card>
         </Col>
@@ -390,6 +391,16 @@ function App({ onLogout }) {
     </div>
   );
 
+  const renderAgenda = () => (
+    <div>
+      <div className="mb-4">
+        {/* <h2>Meeting Agenda</h2>
+        <p className="text-muted">View and manage meeting agendas</p> */}
+      </div>
+      <AgendaView />
+    </div>
+  );
+
   const renderContent = () => {
     return (
       <>
@@ -407,6 +418,8 @@ function App({ onLogout }) {
               return renderMeetingDetails();
             case 'assign-role':
               return renderAssignRole();
+            case 'agenda':
+              return renderAgenda();
             default:
               return (
                 <Card className="shadow-sm">
