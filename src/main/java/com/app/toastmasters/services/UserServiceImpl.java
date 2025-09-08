@@ -1,6 +1,11 @@
 package com.app.toastmasters.services;
 
+import com.app.toastmasters.entity.AvailableMembers;
+import com.app.toastmasters.entity.Meeting;
+import com.app.toastmasters.exceptions.EmptyListException;
 import com.app.toastmasters.exceptions.MemberNotFoundException;
+import com.app.toastmasters.repository.AvailableMembersRepository;
+import com.app.toastmasters.repository.MeetingRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -13,6 +18,8 @@ import com.app.toastmasters.mapper.UserMapper;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.repository.UserRepository;
 
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -22,17 +29,36 @@ public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepo;
     private final UserMapper mapper;
+    private final MeetingRepository meetingRepository;
+    private final AvailableMembersRepository availableMembersRepository;
 
-    public UserServiceImpl(UserRepository userRepo, UserMapper mapper) {
+    public UserServiceImpl(UserRepository userRepo, UserMapper mapper, MeetingRepository meetingRepository, AvailableMembersRepository availableMembersRepository) {
         this.userRepo = userRepo;
         this.mapper = mapper;
+        this.meetingRepository = meetingRepository;
+        this.availableMembersRepository = availableMembersRepository;
     }
 
     @Override
     public ResponseEntity<ResponseMessage<UserResponseDTO>> addMember(UserRequestDTO userRequestDTO) {
       
             User savedUser = userRepo.save(mapper.toEntity(userRequestDTO));
-            ResponseMessage<UserResponseDTO> responseMessage =
+
+            List<Meeting> meetings = meetingRepository.findByMeetingDateGreaterThanEqual(LocalDate.now());
+            AvailableMembers availableMembers = new AvailableMembers();
+            availableMembers.setUser(savedUser);
+            List<AvailableMembers> members = new ArrayList<>();
+            for(Meeting m : meetings){
+                availableMembers.setDate(m.getMeetingDate());
+                availableMembers.setMeeting(m);
+                members.add(availableMembers);
+            }
+        List<AvailableMembers> availableMembersList = availableMembersRepository.saveAll(members);
+
+            if(availableMembersList.isEmpty())
+                throw new EmptyListException(Constant.EMPTY_LIST);
+
+        ResponseMessage<UserResponseDTO> responseMessage =
                     new ResponseMessage<>(HttpStatus.CREATED, Constant.MEMBER_ADDED_SUCCESS, mapper.toResponseDTO(savedUser));
 
             return ResponseEntity.status(HttpStatus.CREATED).body(responseMessage);
