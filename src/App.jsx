@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Button } from 'react-bootstrap';
 import Swal from 'sweetalert2';
 import { getAllMembers, addMember, updateMember, deleteUserById } from './api/UserApi';
@@ -14,10 +15,13 @@ import MeetingDetails from './components/meetings/MeetingDetails';
 import DashboardStats from './components/admin/dashboard/DashboardStats';
 import AssignRole from './components/assign-role/AssignRole';
 import AgendaView from './components/agenda/AgendaView';
+import UpdateAgenda from './components/agenda/updateAgenda';
 import { Users, UserPlus, Calendar, FileText } from 'lucide-react';
 import './App.css';
 
 function App({ onLogout }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +31,15 @@ function App({ onLogout }) {
   const [showMeetingForm, setShowMeetingForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [editingMeeting, setEditingMeeting] = useState(null);
+  const [editingAgendaMeetingId, setEditingAgendaMeetingId] = useState(null);
+  const [selectedAgendaMeetingId, setSelectedAgendaMeetingId] = useState(null);
+
+  // Update activeTab based on current route (keep dashboard default on "/")
+  useEffect(() => {
+    if (location.pathname === '/') {
+      setActiveTab('dashboard');
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     loadUsers();
@@ -397,7 +410,27 @@ function App({ onLogout }) {
         {/* <h2>Meeting Agenda</h2>
         <p className="text-muted">View and manage meeting agendas</p> */}
       </div>
-      <AgendaView />
+      {editingAgendaMeetingId ? (
+        <UpdateAgenda
+          meetingId={editingAgendaMeetingId}
+          onBack={() => {
+            // Return to agenda tab with the same meeting selected
+            setEditingAgendaMeetingId(null);
+            setActiveTab('agenda');
+          }}
+        />
+      ) : (
+        <AgendaView
+          preselectedMeetingId={selectedAgendaMeetingId}
+          onEditAgenda={(mid) => {
+            if (mid) {
+              setActiveTab('agenda');
+              setSelectedAgendaMeetingId(mid);
+              setEditingAgendaMeetingId(mid);
+            }
+          }}
+        />
+      )}
     </div>
   );
 

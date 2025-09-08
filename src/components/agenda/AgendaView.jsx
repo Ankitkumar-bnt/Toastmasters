@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Dropdown, Table, Badge, Alert, Spinner, Modal, Button, Form } from 'react-bootstrap';
 import { Calendar, Clock, Users, BookOpen, Award } from 'lucide-react';
 import { getAllUpcomingMeetings } from '../../api/MeetingApi';
@@ -20,7 +21,8 @@ import {
 import { getUserById } from '../../api/UserApi';
 import toastmastersLogo from '../../assets/img/toastmastersLogo.png';
 
-const AgendaView = () => {
+const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
+  const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [agendaData, setAgendaData] = useState(null);
@@ -91,6 +93,17 @@ const AgendaView = () => {
       setLoading(false);
     }
   };
+
+  // When coming back from UpdateAgenda, restore the previously selected meeting
+  useEffect(() => {
+    if (preselectedMeetingId && meetings && meetings.length > 0) {
+      const match = meetings.find(m => Number(m.meetingId) === Number(preselectedMeetingId));
+      if (match && (!selectedMeeting || Number(selectedMeeting.meetingId) !== Number(preselectedMeetingId))) {
+        handleMeetingSelect(match);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectedMeetingId, meetings]);
 
   const fetchUserData = async (userId) => {
     if (userCache[userId]) return userCache[userId];
@@ -594,11 +607,24 @@ const AgendaView = () => {
     return (
       <tr>
         <td>{currentTime}</td>
-        <td>{item.minTime} min</td>
-        <td>{item.avgTime} min</td>
-        <td>{item.maxTime} min</td>
-        <td>{item.activity}</td>
-        <td>{presenterName}</td>
+        {(() => {
+          const isProvided = (v) => v !== null && v !== undefined && String(v).trim() !== '' && String(v).trim() !== '0';
+          const providedVals = [item.minTime, item.avgTime, item.maxTime].filter(isProvided);
+          if (providedVals.length === 1) {
+            // Merge into one cell (no background) when only one value is provided
+            return <td colSpan={3} className="fw-semibold">{providedVals[0]}</td>;
+          }
+          // Otherwise show three colored cells
+          return (
+            <>
+              <td style={{ backgroundColor: '#84CF6D' }}>{item.minTime || ''}</td>
+              <td style={{ backgroundColor: '#F2D918' }}>{item.avgTime || ''}</td>
+              <td style={{ backgroundColor: '#ED4734' }}>{item.maxTime || ''}</td>
+            </>
+          );
+        })()}
+        <td className="text-start">{item.activity}</td>
+        <td className="text-start">{presenterName}</td>
       </tr>
     );
   };
@@ -638,10 +664,23 @@ const AgendaView = () => {
             <Clock className="me-2" size={20} />
             Meeting Agenda
           </h5>
-          <button className="btn btn-sm btn-light" onClick={() => window.location.href = '/agenda-edit'}>Edit</button>
+          <button
+            className="btn btn-sm btn-light"
+            onClick={() => {
+              if (selectedMeeting?.meetingId) {
+                if (onEditAgenda) {
+                  onEditAgenda(selectedMeeting.meetingId);
+                } else {
+                  navigate(`/update-agenda/${selectedMeeting.meetingId}`);
+                }
+              }
+            }}
+          >
+            Edit
+          </button>
         </Card.Header>
         <Card.Body>
-          <Table responsive bordered hover>
+          <Table responsive bordered hover style={{ border: "2px solid black" }}>
             <thead>
               <tr className='text-center'>
                 <th>Time</th>
