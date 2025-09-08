@@ -32,21 +32,21 @@ public class SpeakerSpeechController {
         return speakerSpeechService.getAllSpeakerSpeech();
     }
 
-    @GetMapping("/getSpeakerSpeechByUserAndMeeting/{userId}/{meetingId}")
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByUserAndMeeting(
-            @PathVariable int userId, @PathVariable int meetingId){
-        return speakerSpeechService.getSpeakerSpeechByUserAndMeeting(userId, meetingId);
+    @GetMapping("/getSpeakerSpeechByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByMeeting(
+            @PathVariable int meetingId){
+        return speakerSpeechService.getSpeakerSpeechByMeeting(meetingId);
     }
 
-    @DeleteMapping("/deleteSpeakerSpeechByUserAndMeeting/{userId}/{meetingId}")
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByUserAndMeeting(
-            @PathVariable int userId, @PathVariable int meetingId){
-        return speakerSpeechService.deleteSpeakerSpeechByUserAndMeeting(userId, meetingId);
+    @DeleteMapping("/deleteSpeakerSpeechByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByMeeting(
+            @PathVariable int meetingId){
+        return speakerSpeechService.deleteSpeakerSpeechByMeeting(meetingId);
     }
 
-    @PutMapping("/updateSpeakerSpeechByUserAndMeeting/{userId}/{meetingId}")
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByUserAndMeeting(
-            @RequestBody SpeakerSpeechRequestDTO speakerSpeechRequestDTO, @PathVariable int userId, @PathVariable int meetingId){
-        return speakerSpeechService.updateSpeakerSpeechByUserAndMeeting(speakerSpeechRequestDTO, userId, meetingId);
+    @PutMapping("/updateSpeakerSpeechByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByMeeting(
+            @RequestBody SpeakerSpeechRequestDTO speakerSpeechRequestDTO, @PathVariable int meetingId){
+        return speakerSpeechService.updateSpeakerSpeechByMeeting(speakerSpeechRequestDTO, meetingId);
     }
 }

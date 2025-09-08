@@ -1,5 +1,6 @@
 package com.app.toastmasters.entity;
 
+import com.app.toastmasters.entity.agenda.AgendaSection;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -31,4 +32,8 @@ public class Agenda {
     @ManyToOne
     @JoinColumn(name = "meeting_id", nullable = false)
     private Meeting meeting;
+
+    @ManyToOne
+    @JoinColumn(name = "section_id", nullable = false)
+    private AgendaSection agendaSection;
 }

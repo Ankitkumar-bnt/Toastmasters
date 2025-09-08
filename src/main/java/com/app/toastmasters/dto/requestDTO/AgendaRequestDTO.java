@@ -16,4 +16,5 @@ public class AgendaRequestDTO {
     private String activity;
     private int userId;
     private int meetingId;
+    private int sectionId;
 }

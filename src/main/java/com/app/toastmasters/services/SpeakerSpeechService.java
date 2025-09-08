@@ -12,9 +12,9 @@ public interface SpeakerSpeechService {
 
     ResponseEntity<ResponseMessage<List<SpeakerSpeechResponseDTO>>> getAllSpeakerSpeech();
 
-    ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByUserAndMeeting(int userId, int meetingId);
+    ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByMeeting(int meetingId);
 
-    ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByUserAndMeeting(int userId, int meetingId);
+    ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByMeeting(int meetingId);
 
-    ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByUserAndMeeting(SpeakerSpeechRequestDTO speakerSpeechRequestDTO, int userId, int meetingId);
+    ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByMeeting(SpeakerSpeechRequestDTO speakerSpeechRequestDTO, int meetingId);
 }

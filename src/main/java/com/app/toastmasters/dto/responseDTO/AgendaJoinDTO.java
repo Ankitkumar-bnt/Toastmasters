@@ -1,5 +1,6 @@
 package com.app.toastmasters.dto.responseDTO;
 
+import com.app.toastmasters.entity.agenda.AgendaSection;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,9 +20,9 @@ public class AgendaJoinDTO {
 
     private List<AgendaResponseDTO> agenda;//meetingId
 
-    private List<SpeakerSpeechResponseDTO> speakerSpeech;//userId meetingId
+    private List<SpeakerSpeechResponseDTO> speakerSpeech;// meetingId
 
-    private List<GrammarianResponseDTO> grammarian;//userId meetingId
+    private List<GrammarianResponseDTO> grammarian;// meetingId
 
     private List<AbbreviationsResponseDTO> abbreviations;//remain same
 }

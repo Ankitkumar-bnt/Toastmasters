@@ -53,8 +53,8 @@ public class SpeakerSpeechServiceImpl implements SpeakerSpeechService {
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByUserAndMeeting(int userId, int meetingId) {
-        Optional<SpeakerSpeech> optionalSpeech = speakerSpeechRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
+    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByMeeting(int meetingId) {
+        Optional<SpeakerSpeech> optionalSpeech = speakerSpeechRepository.findByMeeting_MeetingId(meetingId);
 
         if (optionalSpeech.isEmpty())
             throw new SpeakerSpeechNotFoundException(Constant.SPEAKER_SPEECH_NOT_FOUND);
@@ -65,8 +65,8 @@ public class SpeakerSpeechServiceImpl implements SpeakerSpeechService {
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByUserAndMeeting(int userId, int meetingId) {
-        Optional<SpeakerSpeech> optionalSpeech = speakerSpeechRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
+    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByMeeting(int meetingId) {
+        Optional<SpeakerSpeech> optionalSpeech = speakerSpeechRepository.findByMeeting_MeetingId(meetingId);
 
         if (optionalSpeech.isEmpty())
             throw new SpeakerSpeechNotFoundException(Constant.SPEAKER_SPEECH_NOT_FOUND);
@@ -79,15 +79,15 @@ public class SpeakerSpeechServiceImpl implements SpeakerSpeechService {
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByUserAndMeeting(
-            SpeakerSpeechRequestDTO speakerSpeechRequestDTO, int userId, int meetingId) {
+    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByMeeting(
+            SpeakerSpeechRequestDTO speakerSpeechRequestDTO, int meetingId) {
 
         if (speakerSpeechRequestDTO == null) {
             throw new EmptyObjectException(Constant.EMPTY_OBJECT);
         }
 
         Optional<SpeakerSpeech> optionalSpeech =
-                speakerSpeechRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
+                speakerSpeechRepository.findByMeeting_MeetingId(meetingId);
 
         if (optionalSpeech.isEmpty()) {
             throw new SpeakerSpeechNotFoundException(Constant.SPEAKER_SPEECH_NOT_FOUND);

@@ -20,4 +20,5 @@ public class AgendaResponseDTO {
     private LocalDateTime agendaCreatedDate;
     private int userId;
     private int meetingId;
+    private int sectionId;
 }

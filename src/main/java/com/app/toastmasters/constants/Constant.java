@@ -100,4 +100,11 @@ public class Constant {
 	public static final String STATIC_INFO_FOUND   = "Agenda static info found successfully";
 	public static final String FOUND_ALL_STATIC_INFO = "Found all agenda static info";
 	public static final String STATIC_INFO_NOT_FOUND = "Agenda static info not found";
+
+    public static final String AGENDA_SECTION_ADDED_SUCCESS = "Agenda section added successfully";
+    public static final String AGENDA_SECTION_DISPLAY_SUCCESS = "Agenda section fetched successfully";
+    public static final String AGENDA_SECTION_UPDATED_SUCCESS = "Agenda section updated successfully";
+    public static final String AGENDA_SECTION_DELETED_SUCCESS = "Agenda section deleted successfully";
+    public static final String AGENDA_SECTION_NOT_FOUND = "Agenda section not found";
+
 }
