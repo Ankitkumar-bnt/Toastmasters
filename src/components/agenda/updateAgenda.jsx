@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Row, Col, Card, Table, Button, Form, Alert, Spinner, Dropdown } from 'react-bootstrap';
+import { Row, Col, Card, Table, Button, Form, Alert, Spinner, Dropdown, Modal } from 'react-bootstrap';
 import { Clock, Plus, Save, ArrowLeft, Trash2 } from 'lucide-react';
 import { getAgenda, addAgendaRows } from '../../api/AgendaJoinApi';
 import { getUserById, getAllMembers } from '../../api/UserApi';
 import { getAllMemberAvailability } from '../../api/AvailableMembersApi';
+import { getAllAgendaSections, addAgendaSection, updateAgendaSection, deleteAgendaSection } from '../../api/AgendaSectionApi';
 
 const UpdateAgenda = ({ meetingId, onBack }) => {
   
@@ -17,11 +18,24 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
   const [allMembers, setAllMembers] = useState([]);
   const allowDrag = useRef(false);
   const [dragIndex, setDragIndex] = useState(null);
+  const [sections, setSections] = useState([]);
+  const [sectionById, setSectionById] = useState({});
+  const [selectedSectionId, setSelectedSectionId] = useState(1); // default to 1 as requested
+  const [showManageSectionsModal, setShowManageSectionsModal] = useState(false);
+  const [showAddSectionModal, setShowAddSectionModal] = useState(false);
+  const [newSectionName, setNewSectionName] = useState('');
+  const [editingSectionNames, setEditingSectionNames] = useState({}); // { [id]: name }
+
+  const normalizeSectionId = (v) => {
+    const n = parseInt(v);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  };
 
   useEffect(() => {
     if (meetingId) {
       loadAgendaData();
       loadAvailableMembers();
+      loadAgendaSections();
     }
   }, [meetingId]);
 
@@ -30,13 +44,32 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       setLoading(true);
       setError(null);
       const response = await getAgenda(meetingId);
-      const agenda = response.data.data?.agenda || [];
+      let agenda = response.data.data?.agenda || [];
+
+      // Apply client-side saved order if available (best-effort)
+      try {
+        const orderKey = `tm_agenda_order_${meetingId}`;
+        const stored = JSON.parse(localStorage.getItem(orderKey) || '[]');
+        if (Array.isArray(stored) && stored.length) {
+          const sig = (r) => `${r.activity || ''}|${r.userId || ''}|${r.minTime || ''}|${r.maxTime || ''}|${r.sectionId || r.agendaSectionId || r?.agendaSection?.sectionId || 1}`;
+          const orderMap = new Map(stored.map((s, idx) => [s, idx]));
+          agenda = [...agenda].sort((a, b) => {
+            const ia = orderMap.get(sig(a));
+            const ib = orderMap.get(sig(b));
+            if (ia == null && ib == null) return 0;
+            if (ia == null) return 1;
+            if (ib == null) return -1;
+            return ia - ib;
+          });
+        }
+      } catch (_) {}
       
-      // Transform agenda data to include editable fields
+      // Transform agenda data to include editable fields and carry section id if present
       const editableAgenda = agenda.map((item, index) => ({
         ...item,
         id: item.agendaId || `temp-${index}`,
-        isNew: false
+        isNew: false,
+        sectionId: normalizeSectionId(item.sectionId || item.agendaSectionId || item.agendaSection?.sectionId || 1)
       }));
       
       setAgendaData(editableAgenda);
@@ -45,6 +78,30 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       setError('Failed to load agenda data. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAgendaSections = async () => {
+    try {
+      const resp = await getAllAgendaSections();
+      // Handle common wrappers
+      const list = Array.isArray(resp)
+        ? resp
+        : Array.isArray(resp?.data)
+          ? resp.data
+          : Array.isArray(resp?.data?.data)
+            ? resp.data.data
+            : [];
+      setSections(list);
+      const map = {};
+      list.forEach(s => { map[(s.sectionId || s.id)] = s.sectionName; });
+      setSectionById(map);
+      // If sectionId 1 exists use it as default, else first available
+      const hasDefault = list.some(s => (s.sectionId || s.id) === 1);
+      setSelectedSectionId(hasDefault ? 1 : (list[0]?.sectionId || list[0]?.id || 1));
+    } catch (e) {
+      // fallback keeps default = 1
+      console.warn('Failed to load agenda sections', e?.message);
     }
   };
 
@@ -167,6 +224,9 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
   };
 
   const handleAddRow = () => {
+    // Determine section for this new row: last declared section header, else current selected, else 1
+    const lastSection = [...agendaData].reverse().find(r => r.isSection);
+    const effectiveSectionId = normalizeSectionId(lastSection?.sectionId || selectedSectionId || 1);
     const newRow = {
       id: `new-${Date.now()}`,
       activity: '',
@@ -175,9 +235,25 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       maxTime: 0,
       userId: '',
       meetingId: parseInt(meetingId),
-      isNew: true
+      isNew: true,
+      sectionId: effectiveSectionId
     };
     
+    setAgendaData(prev => [...prev, newRow]);
+  };
+
+  const handleAddNoSectionRow = () => {
+    const newRow = {
+      id: `new-${Date.now()}`,
+      activity: '',
+      minTime: 0,
+      avgTime: 0,
+      maxTime: 0,
+      userId: '',
+      meetingId: parseInt(meetingId),
+      isNew: true,
+      sectionId: 1
+    };
     setAgendaData(prev => [...prev, newRow]);
   };
 
@@ -193,6 +269,62 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
 
   const handleDeleteRow = (id) => {
     setAgendaData(prev => prev.filter(item => item.id !== id));
+  };
+
+  // Manage Sections Handlers
+  const openManageSections = () => {
+    // seed editing names
+    const names = {};
+    sections.forEach(s => { names[s.sectionId || s.id] = s.sectionName; });
+    setEditingSectionNames(names);
+    setShowManageSectionsModal(true);
+  };
+
+  const handleUpdateSection = async (id) => {
+    try {
+      const name = editingSectionNames[id];
+      if (!name || !String(name).trim()) return;
+      await updateAgendaSection(id, { sectionName: name.trim() });
+      await loadAgendaSections();
+    } catch (e) {
+      console.error('Update section failed', e?.response || e);
+    }
+  };
+
+  const handleDeleteSection = async (id) => {
+    if (id === 1) return; // protect No section
+    try {
+      await deleteAgendaSection(id);
+      await loadAgendaSections();
+    } catch (e) {
+      console.error('Delete section failed', e?.response || e);
+    }
+  };
+
+  const handleAddSection = async () => {
+    try {
+      if (!newSectionName || !newSectionName.trim()) return;
+      await addAgendaSection({ sectionName: newSectionName.trim() });
+      setNewSectionName('');
+      setShowAddSectionModal(false);
+      await loadAgendaSections();
+    } catch (e) {
+      console.error('Add section failed', e?.response || e);
+    }
+  };
+
+  const handleAddSectionHeader = (sectionId) => {
+    sectionId = normalizeSectionId(sectionId);
+    setSelectedSectionId(sectionId);
+    const section = sections.find(s => (s.sectionId || s.id) === sectionId);
+    const name = section?.sectionName || 'Section';
+    const headerRow = {
+      id: `section-${sectionId}-${Date.now()}`,
+      isSection: true,
+      sectionId: sectionId,
+      sectionName: name
+    };
+    setAgendaData(prev => [...prev, headerRow]);
   };
 
   // Drag and Drop handlers
@@ -231,9 +363,9 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       setSaving(true);
       setError(null);
       
-      // Validate required fields
-      const invalidRows = agendaData.filter(row => 
-        !row.activity.trim() || !row.userId || row.maxTime <= 0
+      // Validate required fields (ignore section header rows)
+      const invalidRows = agendaData.filter(row => !row.isSection).filter(row => 
+        !String(row.activity || '').trim() || !row.userId || (parseInt(row.maxTime) || 0) <= 0
       );
       
       if (invalidRows.length > 0) {
@@ -241,17 +373,50 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
         return;
       }
 
-      // Prepare data for API - only send new rows or modified rows
-      const rowsToSave = agendaData.map(row => ({
-        activity: row.activity,
-        minTime: row.minTime,
-        avgTime: row.avgTime,
-        maxTime: row.maxTime,
-        userId: parseInt(row.userId),
-        meetingId: parseInt(meetingId)
-      }));
+      // Prepare data for API - only send non-section rows with correct section inheritance
+      const rowsToSave = [];
+      let currentSectionId = 1; // default section ID
+      
+      // Build rows to save and persist client-side order signature for next load
+      const orderKey = `tm_agenda_order_${meetingId}`;
+      const orderSignatures = [];
+
+      for (const row of agendaData) {
+        if (row.isSection) {
+          // Explicit header row updates the running section
+          currentSectionId = normalizeSectionId(row.sectionId);
+          continue;
+        }
+
+        // Prefer the row's own sectionId if present; else use the running section; else default 1
+        const effectiveRowSectionId = normalizeSectionId(row.sectionId || currentSectionId || 1);
+
+        // If this row explicitly carried a sectionId, update the running section for subsequent rows
+        if (row.sectionId) {
+          currentSectionId = effectiveRowSectionId;
+        }
+
+        const payload = {
+          activity: row.activity,
+          minTime: row.minTime,
+          avgTime: row.avgTime,
+          maxTime: row.maxTime,
+          userId: parseInt(row.userId),
+          meetingId: parseInt(meetingId),
+          sectionId: effectiveRowSectionId
+        };
+        rowsToSave.push(payload);
+
+        // push signature to persist order client-side
+        orderSignatures.push(`${payload.activity || ''}|${payload.userId || ''}|${payload.minTime || ''}|${payload.maxTime || ''}|${payload.sectionId || 1}`);
+      }
+
+      console.log('Submitting agenda rows:', rowsToSave);
 
       await addAgendaRows(rowsToSave);
+
+      // Save order signatures for reload sorting
+      try { localStorage.setItem(orderKey, JSON.stringify(orderSignatures)); } catch(_) {}
       
       setSuccess(true);
       setTimeout(() => {
@@ -259,8 +424,9 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       }, 1000);
       
     } catch (err) {
-      console.error('Error saving agenda:', err);
-      setError('Failed to save agenda. Please try again.');
+      console.error('Error saving agenda:', err?.response || err);
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Failed to save agenda. Please try again.';
+      setError(String(msg));
     } finally {
       setSaving(false);
     }
@@ -304,7 +470,75 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                   Update Meeting Agenda
                 </h5>
               </div>
+
+              {/* Manage Sections Modal */}
+              <Modal show={showManageSectionsModal} onHide={() => setShowManageSectionsModal(false)} centered size="md">
+                <Modal.Header closeButton>
+                  <Modal.Title>Manage Sections</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <div className="mb-3 d-flex justify-content-end">
+                    <Button size="sm" variant="primary" onClick={() => setShowAddSectionModal(true)}>
+                      <Plus size={14} className="me-1" /> Add Section
+                    </Button>
+                  </div>
+                  {sections && sections.length > 0 ? (
+                    <div className="d-flex flex-column gap-2">
+                      {sections
+                        .filter(s => (s.sectionId || s.id) !== 1)
+                        .map((s) => {
+                          const id = s.sectionId || s.id;
+                          return (
+                            <div key={id} className="d-flex align-items-center gap-2">
+                              <Form.Control
+                                size="sm"
+                                value={editingSectionNames[id] ?? s.sectionName}
+                                onChange={(e) => setEditingSectionNames(prev => ({ ...prev, [id]: e.target.value }))}
+                              />
+                              <Button size="sm" variant="outline-success" onClick={() => handleUpdateSection(id)}>Update</Button>
+                              <Button size="sm" variant="outline-danger" onClick={() => handleDeleteSection(id)}>Delete</Button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <div className="text-muted">No sections available.</div>
+                  )}
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button variant="secondary" onClick={() => setShowManageSectionsModal(false)}>Close</Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* Add Section Modal */}
+              <Modal show={showAddSectionModal} onHide={() => setShowAddSectionModal(false)} centered>
+                <Modal.Header closeButton>
+                  <Modal.Title>Add Section</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <Form.Group>
+                    <Form.Label>Section Name</Form.Label>
+                    <Form.Control
+                      value={newSectionName}
+                      onChange={(e) => setNewSectionName(e.target.value)}
+                      placeholder="Enter section name"
+                    />
+                  </Form.Group>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button variant="secondary" onClick={() => setShowAddSectionModal(false)}>Cancel</Button>
+                  <Button variant="primary" onClick={handleAddSection}>Add</Button>
+                </Modal.Footer>
+              </Modal>
               <div>
+                <Button 
+                  variant="warning"
+                  className="me-2"
+                  size="sm"
+                  onClick={openManageSections}
+                >
+                  Manage Sections
+                </Button>
                 <Button 
                   variant="light"
                   className="text-dark"
@@ -391,105 +625,163 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                         return `${displayHour}:${mins.toString().padStart(2, "0")} ${ampm}`;
                       };
 
+                      if (item.isSection) {
+                        return (
+                          <tr key={item.id}>
+                            <td colSpan={7} className="text-center fw-bold" style={{ backgroundColor: '#f1f3f5' }}>
+                              {item.sectionName}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      // For loaded rows without explicit header rows, compute section header when section changes
+                      const normalizeId = (v) => {
+                        const n = parseInt(v);
+                        return Number.isFinite(n) && n > 0 ? n : 1;
+                      };
+                      const getRowSectionId = (it) => normalizeId(it?.sectionId || it?.agendaSectionId || it?.agendaSection?.sectionId || 1);
+                      const currSectionId = getRowSectionId(item);
+                      let prevSectionId = 1;
+                      for (let i = index - 1; i >= 0; i--) {
+                        if (!agendaData[i].isSection) { prevSectionId = getRowSectionId(agendaData[i]); break; }
+                        if (agendaData[i].isSection) { prevSectionId = normalizeId(agendaData[i].sectionId); break; }
+                      }
+                      const shouldShowComputedHeader = currSectionId !== 1 && currSectionId !== prevSectionId;
+                      const computedHeaderName = sectionById[currSectionId] || item?.agendaSection?.sectionName || `Section ${currSectionId}`;
+
+                      const blockKey = `edit-rowblock-${item.agendaId || item.id || index}`;
                       return (
-                        <tr 
-                          key={item.id}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, index)}
-                          onDragOver={handleDragOver}
-                          onDrop={(e) => handleDrop(e, index)}
-                        >
-                          <td 
-                            className="text-center align-middle"
-                            onMouseDown={() => { allowDrag.current = false; }}
+                        <React.Fragment key={blockKey}>
+                          {shouldShowComputedHeader && computedHeaderName && (
+                            <tr key={`hdr-${currSectionId}-${index}`}>
+                              <td colSpan={7} className="text-center fw-bold" style={{ backgroundColor: '#f1f3f5' }}>
+                                {computedHeaderName}
+                              </td>
+                            </tr>
+                          )}
+                          <tr 
+                            key={`data-${item.agendaId || item.id || index}`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, index)}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, index)}
                           >
-                            <strong>{formatTime(currentTime)}</strong>
-                          </td>
-                          <td onMouseDown={() => { allowDrag.current = true; }}>
-                            <Form.Control
-                              type="text"
-                              value={item.minTime || ''}
-                              onChange={(e) => handleInputChange(item.id, 'minTime', e.target.value)}
-                              placeholder="e.g. 2:30"
-                            />
-                          </td>
-                          <td onMouseDown={() => { allowDrag.current = true; }}>
-                            <Form.Control
-                              type="text"
-                              value={item.avgTime || ''}
-                              onChange={(e) => handleInputChange(item.id, 'avgTime', e.target.value)}
-                              placeholder="e.g. 3:00"
-                            />
-                          </td>
-                          <td onMouseDown={() => { allowDrag.current = true; }}>
-                            <Form.Control
-                              type="text"
-                              value={item.maxTime || ''}
-                              onChange={(e) => handleInputChange(item.id, 'maxTime', e.target.value)}
-                              placeholder="e.g. 4:00"
-                              required
-                            />
-                          </td>
-                          <td onMouseDown={() => { allowDrag.current = true; }}>
-                            <Form.Control
-                              type="text"
-                              value={item.activity}
-                              onChange={(e) => handleInputChange(item.id, 'activity', e.target.value)}
-                              placeholder="Enter activity description"
-                              required
-                            />
-                          </td>
-                          <td onMouseDown={() => { allowDrag.current = true; }}>
-                            <Dropdown>
-                              <Dropdown.Toggle 
-                                variant="outline-secondary" 
-                                size="sm" 
-                                className="w-100 text-center"
-                                style={{ textAlign: 'center', paddingRight: '1.5rem' }}
-                              >
-                                {getSelectedMemberName(item.userId)}
-                              </Dropdown.Toggle>
-                              <Dropdown.Menu className="w-100" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                                <Dropdown.Item 
-                                  onClick={() => handleInputChange(item.id, 'userId', '')}
-                                >
-                                  <em>Select a presenter</em>
-                                </Dropdown.Item>
-                                <Dropdown.Divider />
-                                {availableMembers.map((member) => (
-                                  <Dropdown.Item
-                                    key={member.userId}
-                                    onClick={() => handleInputChange(item.id, 'userId', member.userId)}
-                                  >
-                                    ID:{member.userId} {member.userName}
-                                  </Dropdown.Item>
-                                ))}
-                                {availableMembers.length === 0 && (
-                                  <Dropdown.Item disabled>
-                                    <em>No available members found</em>
-                                  </Dropdown.Item>
-                                )}
-                              </Dropdown.Menu>
-                            </Dropdown>
-                          </td>
-                          <td className="text-center">
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              onClick={() => handleDeleteRow(item.id)}
-                              title="Delete row"
+                            <td 
+                              className="text-center align-middle"
+                              onMouseDown={() => { allowDrag.current = false; }}
                             >
-                              <Trash2 size={14} />
-                            </Button>
-                          </td>
-                        </tr>
+                              <strong>{formatTime(currentTime)}</strong>
+                            </td>
+                            <td onMouseDown={() => { allowDrag.current = true; }}>
+                              <Form.Control
+                                type="text"
+                                value={item.minTime || ''}
+                                onChange={(e) => handleInputChange(item.id, 'minTime', e.target.value)}
+                                placeholder="e.g. 2:30"
+                              />
+                            </td>
+                            <td onMouseDown={() => { allowDrag.current = true; }}>
+                              <Form.Control
+                                type="text"
+                                value={item.avgTime || ''}
+                                onChange={(e) => handleInputChange(item.id, 'avgTime', e.target.value)}
+                                placeholder="e.g. 3:00"
+                              />
+                            </td>
+                            <td onMouseDown={() => { allowDrag.current = true; }}>
+                              <Form.Control
+                                type="text"
+                                value={item.maxTime || ''}
+                                onChange={(e) => handleInputChange(item.id, 'maxTime', e.target.value)}
+                                placeholder="e.g. 4:00"
+                                required
+                              />
+                            </td>
+                            <td onMouseDown={() => { allowDrag.current = true; }}>
+                              <Form.Control
+                                type="text"
+                                value={item.activity}
+                                onChange={(e) => handleInputChange(item.id, 'activity', e.target.value)}
+                                placeholder="Enter activity description"
+                                required
+                              />
+                            </td>
+                            <td onMouseDown={() => { allowDrag.current = true; }}>
+                              <Dropdown>
+                                <Dropdown.Toggle 
+                                  variant="outline-secondary" 
+                                  size="sm" 
+                                  className="w-100 text-center"
+                                  style={{ textAlign: 'center', paddingRight: '1.5rem' }}
+                                >
+                                  {getSelectedMemberName(item.userId)}
+                                </Dropdown.Toggle>
+                                <Dropdown.Menu className="w-100" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                                  <Dropdown.Item 
+                                    onClick={() => handleInputChange(item.id, 'userId', '')}
+                                  >
+                                    <em>Select a presenter</em>
+                                  </Dropdown.Item>
+                                  <Dropdown.Divider />
+                                  {availableMembers.map((member) => (
+                                    <Dropdown.Item
+                                      key={member.userId}
+                                      onClick={() => handleInputChange(item.id, 'userId', member.userId)}
+                                    >
+                                      ID:{member.userId} {member.userName}
+                                    </Dropdown.Item>
+                                  ))}
+                                  {availableMembers.length === 0 && (
+                                    <Dropdown.Item disabled>
+                                      <em>No available members found</em>
+                                    </Dropdown.Item>
+                                  )}
+                                </Dropdown.Menu>
+                              </Dropdown>
+                            </td>
+                            <td className="text-center">
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => handleDeleteRow(item.id)}
+                                title="Delete row"
+                              >
+                                <Trash2 size={14} />
+                              </Button>
+                            </td>
+                          </tr>
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
                 </Table>
               )}
               
-              <div className="mt-3 d-flex justify-content-end">
+              <div className="mt-3 d-flex justify-content-end align-items-center">
+                <Dropdown drop="up" className="me-2">
+                  <Dropdown.Toggle variant="outline-primary" size="sm" className="d-flex align-items-center">
+                    <Plus size={16} className="me-1" />
+                    {(() => {
+                      const selected = sections.find(s => (s.sectionId || s.id) === selectedSectionId);
+                      return selected ? `${selected.sectionName}` : `Add section`;
+                    })()}
+                  </Dropdown.Toggle>
+                  <Dropdown.Menu style={{ maxHeight: '240px', overflowY: 'auto' }}>
+                    {sections && sections.length > 0 ? (
+                      sections.map((sec) => (
+                        <Dropdown.Item 
+                          key={sec.sectionId || sec.id}
+                          onClick={() => handleAddSectionHeader(sec.sectionId || sec.id)}
+                        >
+                          {sec.sectionName}
+                        </Dropdown.Item>
+                      ))
+                    ) : (
+                      <Dropdown.Item disabled>No sections found (default: ID 1)</Dropdown.Item>
+                    )}
+                  </Dropdown.Menu>
+                </Dropdown>
                 <Button 
                   variant="outline-primary" 
                   className="me-2"

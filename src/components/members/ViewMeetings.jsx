@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Spinner, Table, Badge, Dropdown, Pagination } from 'react-bootstrap';
+import { Card, Spinner, Table, Badge, Dropdown, Pagination, Button } from 'react-bootstrap';
 import { Calendar, Clock, Filter } from 'lucide-react';
 import { getAllMeetings } from '../../api/MeetingApi';
 
-const ViewMeetings = ({ onOpenDetails }) => {
+const ViewMeetings = ({ onOpenDetails, onOpenAssignedWodPod, onOpenAssignedSpeech }) => {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -137,18 +137,26 @@ const ViewMeetings = ({ onOpenDetails }) => {
     <div style={{ width: '88%', margin: '0 auto' }}>
       <div className="d-flex justify-content-between align-items-center mb-3">
         <h5>Meetings</h5>
-        <Dropdown>
-          <Dropdown.Toggle variant="outline-secondary" size="sm">
-            <Filter size={16} className="me-2" />
-            Filter: {categoryFilter}
-          </Dropdown.Toggle>
-          <Dropdown.Menu>
-            <Dropdown.Item onClick={() => setCategoryFilter('All')}>All Meetings</Dropdown.Item>
-            <Dropdown.Item onClick={() => setCategoryFilter('Regular')}>Regular</Dropdown.Item>
-            <Dropdown.Item onClick={() => setCategoryFilter('Special')}>Special</Dropdown.Item>
-            <Dropdown.Item onClick={() => setCategoryFilter('Contest')}>Contest</Dropdown.Item>
-          </Dropdown.Menu>
-        </Dropdown>
+        <div className="d-flex align-items-center gap-2">
+          <Dropdown>
+            <Dropdown.Toggle variant="outline-secondary" size="sm">
+              <Filter size={16} className="me-2" />
+              Filter: {categoryFilter}
+            </Dropdown.Toggle>
+            <Dropdown.Menu>
+              <Dropdown.Item onClick={() => setCategoryFilter('All')}>All Meetings</Dropdown.Item>
+              <Dropdown.Item onClick={() => setCategoryFilter('Regular')}>Regular</Dropdown.Item>
+              <Dropdown.Item onClick={() => setCategoryFilter('Special')}>Special</Dropdown.Item>
+              <Dropdown.Item onClick={() => setCategoryFilter('Contest')}>Contest</Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown>
+          <Button size="sm" variant="primary" onClick={() => onOpenAssignedWodPod && onOpenAssignedWodPod()}>
+            Assigned WOD/POD
+          </Button>
+          <Button size="sm" variant="success" onClick={() => onOpenAssignedSpeech && onOpenAssignedSpeech()}>
+            Assigned Speech
+          </Button>
+        </div>
       </div>
 
       <Card className="shadow-sm">

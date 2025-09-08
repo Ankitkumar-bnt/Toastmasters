@@ -5,6 +5,8 @@ import { logout } from '../../api/AuthApi';
 import ViewMeetings from './ViewMeetings';
 import MeetingDetailsView from './MeetingDetailsView';
 import PreferredRolesPage from './PreferredRolesPage';
+import AssignedSpeech from './AssignedSpeech';
+import AssignedWodPod from './AssignedWodPod';
 import { getAllMeetings } from '../../api/MeetingApi';
 
 function MemberDashboard({ onLogout }) {
@@ -85,7 +87,11 @@ function MemberDashboard({ onLogout }) {
               onBack={() => setSelectedMeeting(null)}
             />
           ) : (
-            <ViewMeetings onOpenDetails={(m) => setSelectedMeeting(m)} />
+            <ViewMeetings 
+              onOpenDetails={(m) => setSelectedMeeting(m)} 
+              onOpenAssignedWodPod={() => setActiveTab('assigned-wodpod')}
+              onOpenAssignedSpeech={() => setActiveTab('assigned-speech')}
+            />
           )
         );
       case 'preferred-role':
@@ -93,6 +99,14 @@ function MemberDashboard({ onLogout }) {
           setSelectedMeeting(meeting);
           setActiveTab('view-meeting');
         }} />;
+      case 'assigned-wodpod':
+        return (
+          <AssignedWodPod onBack={() => setActiveTab('view-meeting')} />
+        );
+      case 'assigned-speech':
+        return (
+          <AssignedSpeech onBack={() => setActiveTab('view-meeting')} />
+        );
       case 'profile':
         return null; // We'll handle profile in a modal now
       default:

@@ -20,6 +20,7 @@ import {
 } from '../../api/AgendaJoinApi';
 import { getUserById } from '../../api/UserApi';
 import toastmastersLogo from '../../assets/img/toastmastersLogo.png';
+import { getAllAgendaSections } from '../../api/AgendaSectionApi';
 
 const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   const navigate = useNavigate();
@@ -34,6 +35,8 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   const [staticInfoData, setStaticInfoData] = useState([]);
   const [editingInfo, setEditingInfo] = useState({});
   const [updating, setUpdating] = useState(false);
+  const [sections, setSections] = useState([]);
+  const [sectionById, setSectionById] = useState({});
   
   // Club Officers Modal States
   const [showOfficersModal, setShowOfficersModal] = useState(false);
@@ -59,6 +62,28 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
 
   useEffect(() => {
     loadMeetings();
+  }, []);
+
+  useEffect(() => {
+    const loadSections = async () => {
+      try {
+        const resp = await getAllAgendaSections();
+        const list = Array.isArray(resp)
+          ? resp
+          : Array.isArray(resp?.data)
+            ? resp.data
+            : Array.isArray(resp?.data?.data)
+              ? resp.data.data
+              : [];
+        setSections(list);
+        const map = {};
+        list.forEach(s => { map[s.sectionId || s.id] = s.sectionName; });
+        setSectionById(map);
+      } catch (e) {
+        console.warn('Failed to load sections', e?.message);
+      }
+    };
+    loadSections();
   }, []);
 
   const loadMeetings = async () => {
@@ -638,7 +663,20 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
               <Clock className="me-2" size={20} />
               Meeting Agenda
             </h5>
-            <button className="btn btn-sm btn-light">Edit</button>
+            <button
+              className="btn btn-sm btn-light"
+              onClick={() => {
+                if (selectedMeeting?.meetingId) {
+                  if (onEditAgenda) {
+                    onEditAgenda(selectedMeeting.meetingId);
+                  } else {
+                    navigate(`/update-agenda/${selectedMeeting.meetingId}`);
+                  }
+                }
+              }}
+            >
+              Edit
+            </button>
           </Card.Header>
           <Card.Body>
             <p className="text-muted">No agenda items available</p>
@@ -695,7 +733,30 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
               {agendaData.agenda.map((item, index) => {
                 const rowTime = formatTime(currentTime);
                 currentTime = new Date(currentTime.getTime() + item.maxTime * 60000);
-                return <AgendaTableRow key={index} item={item} currentTime={rowTime} />;
+
+                const normalizeId = (v) => {
+                  const n = parseInt(v);
+                  return Number.isFinite(n) && n > 0 ? n : 1;
+                };
+                const getSectionId = (it) => normalizeId(it?.sectionId || it?.agendaSectionId || it?.agendaSection?.sectionId || 1);
+                const currSectionId = getSectionId(item);
+                const prevSectionId = index > 0 ? getSectionId(agendaData.agenda[index - 1]) : 1;
+                const showHeader = currSectionId !== 1 && currSectionId !== prevSectionId;
+                const secName = sectionById[currSectionId];
+
+                const blockKey = `rowblock-${item.agendaId || item.id || index}`;
+                return (
+                  <React.Fragment key={blockKey}>
+                    {showHeader && secName && (
+                      <tr key={`sec-${currSectionId}-${index}`}>
+                        <td colSpan={6} className="text-center fw-bold" style={{ backgroundColor: '#f1f3f5' }}>
+                          {secName}
+                        </td>
+                      </tr>
+                    )}
+                    <AgendaTableRow key={`row-${item.agendaId || item.id || index}`} item={item} currentTime={rowTime} />
+                  </React.Fragment>
+                );
               })}
             </tbody>
           </Table>
