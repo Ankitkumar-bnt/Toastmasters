@@ -23,3 +23,13 @@ export const getAllMeetingRoleByMeetingTheme = async (meetingTheme) => {
 export const getAllMeetingRoleCombineByMeeting = async (meetingId) => {
   return axios.get(`${BASE_URL}/getAllMeetingRoleCombineByMeeting/${meetingId}`);
 };
+
+export const getLast3MeetingRoles = async (userId) => {
+  try {
+    const response = await axios.get(`${BASE_URL}/getLast3MeetingRoles/${userId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error in getLast3MeetingRoles:', error);
+    throw error;
+  }
+};

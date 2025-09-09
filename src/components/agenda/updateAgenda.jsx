@@ -5,6 +5,7 @@ import { getAgenda, addAgendaRows } from '../../api/AgendaJoinApi';
 import { getUserById, getAllMembers } from '../../api/UserApi';
 import { getAllMemberAvailability } from '../../api/AvailableMembersApi';
 import { getAllAgendaSections, addAgendaSection, updateAgendaSection, deleteAgendaSection } from '../../api/AgendaSectionApi';
+import { getSpeakerSpeechByMeeting } from '../../api/SpeakerSpeechApi';
 
 const UpdateAgenda = ({ meetingId, onBack }) => {
   
@@ -25,10 +26,109 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
   const [showAddSectionModal, setShowAddSectionModal] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
   const [editingSectionNames, setEditingSectionNames] = useState({}); // { [id]: name }
+  const [selectedRowIndex, setSelectedRowIndex] = useState(null); // index of the row clicked/selected
+  const [speakerSpeeches, setSpeakerSpeeches] = useState([]); // speaker speech data for the meeting
 
   const normalizeSectionId = (v) => {
     const n = parseInt(v);
     return Number.isFinite(n) && n > 0 ? n : 1;
+  };
+
+  // Recalculate all data rows' sectionId based on the flow of headers
+  // Any row with an invalid/deleted sectionId gets reassigned to nearest header above or 1
+  const recalcSectionIdsFromHeaders = (list) => {
+    const next = list.map(x => ({ ...x }));
+    const validIds = new Set([1, ...(sections || []).map(s => normalizeSectionId(s.sectionId || s.id))]);
+    let current = 1;
+    for (let i = 0; i < next.length; i++) {
+      const row = next[i];
+      if (row.isSection) {
+        const hdrId = normalizeSectionId(row.sectionId);
+        // Keep valid headers, convert invalid ones to section 1
+        if (validIds.has(hdrId)) {
+          current = hdrId;
+          row.sectionId = hdrId;
+        } else {
+          current = 1;
+          row.sectionId = 1;
+          // Update section name for invalid headers
+          const defaultSection = sections.find(s => normalizeSectionId(s.sectionId || s.id) === 1);
+          row.sectionName = defaultSection?.sectionName || 'No Section';
+        }
+      } else {
+        // For data rows, always use the current flowing section
+        row.sectionId = normalizeSectionId(current || 1);
+      }
+    }
+    return next;
+  };
+
+  // Helper to get a row's effective section id (works for both data and loaded rows)
+  const getRowSectionId = (it) => normalizeSectionId(it?.sectionId || it?.agendaSectionId || it?.agendaSection?.sectionId || 1);
+
+  // Compute the effective section context up to and including the given index
+  // This emulates how section flows down until changed by a header or explicit row.sectionId
+  const computeEffectiveSectionIdForIndex = (idx) => {
+    if (!Array.isArray(agendaData) || agendaData.length === 0) return normalizeSectionId(selectedSectionId || 1);
+    let current = 1;
+    for (let i = 0; i <= idx && i < agendaData.length; i++) {
+      const row = agendaData[i];
+      if (row?.isSection) {
+        current = normalizeSectionId(row.sectionId);
+      } else if (row?.sectionId) {
+        current = normalizeSectionId(row.sectionId);
+      } else {
+        // inherit
+        current = normalizeSectionId(current);
+      }
+    }
+    return normalizeSectionId(current || selectedSectionId || 1);
+  };
+
+  // Helper functions for speech sections
+  const isSpeechSection = (sectionName) => {
+    if (!sectionName) return false;
+    const name = sectionName.toLowerCase();
+    return name.includes('speech');
+  };
+
+  const formatPathwaysTrack = (track) => {
+    if (!track) return '';
+    return track.split(' ').map(word => word.charAt(0).toUpperCase()).join('');
+  };
+
+  const formatLevel = (level) => {
+    if (!level) return '';
+    return `L${level}`;
+  };
+
+  const formatProjectNo = (projectNo) => {
+    if (!projectNo) return '';
+    const num = parseInt(projectNo);
+    return Number.isFinite(num) ? `P${num}` : projectNo;
+  };
+
+  const calculateAverageTime = (minTime, maxTime) => {
+    const min = parseInt(minTime) || 0;
+    const max = parseInt(maxTime) || 0;
+    if (min === 0 && max === 0) return 0;
+    return Math.round((min + max) / 2);
+  };
+
+  const getCurrentSectionName = (index) => {
+    // Walk backwards to find the current section
+    for (let i = index; i >= 0; i--) {
+      const row = agendaData[i];
+      if (row?.isSection) {
+        return row.sectionName;
+      }
+    }
+    // If no explicit header found, check the row's sectionId
+    const currentRow = agendaData[index];
+    if (currentRow?.sectionId) {
+      return sectionById[currentRow.sectionId] || '';
+    }
+    return '';
   };
 
   useEffect(() => {
@@ -44,7 +144,32 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       setLoading(true);
       setError(null);
       const response = await getAgenda(meetingId);
+      console.log('=== AGENDA API RESPONSE ===');
+      console.log('Full response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response data.data:', response.data.data);
+      
       let agenda = response.data.data?.agenda || [];
+      let speakerSpeeches = response.data.data?.speakerSpeeches || [];
+      
+      console.log('Extracted agenda:', agenda);
+      console.log('Extracted speakerSpeeches (from getAgenda):', speakerSpeeches);
+      console.log('SpeakerSpeeches length (from getAgenda):', speakerSpeeches.length);
+
+      // Fallback: if getAgenda did not include speakerSpeeches, fetch directly
+      if (!Array.isArray(speakerSpeeches) || speakerSpeeches.length === 0) {
+        try {
+          console.log('Speaker speeches missing in getAgenda; fetching via SpeakerSpeechApi...');
+          const ssResp = await getSpeakerSpeechByMeeting(meetingId);
+          const payload = ssResp?.data ?? ssResp;
+          // Normalize to array (API may return a single object)
+          speakerSpeeches = Array.isArray(payload) ? payload : [payload].filter(Boolean);
+          console.log('Fetched speakerSpeeches via fallback:', speakerSpeeches);
+        } catch (ssErr) {
+          console.warn('Fallback fetch for speakerSpeeches failed:', ssErr?.response || ssErr);
+          speakerSpeeches = [];
+        }
+      }
 
       // Apply client-side saved order if available (best-effort)
       try {
@@ -65,12 +190,58 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       } catch (_) {}
       
       // Transform agenda data to include editable fields and carry section id if present
-      const editableAgenda = agenda.map((item, index) => ({
+      let editableAgenda = agenda.map((item, index) => ({
         ...item,
         id: item.agendaId || `temp-${index}`,
         isNew: false,
         sectionId: normalizeSectionId(item.sectionId || item.agendaSectionId || item.agendaSection?.sectionId || 1)
       }));
+      
+      // Add PREPARED SPEECHES SESSION if speaker speeches exist
+      console.log('Checking if speakerSpeeches exist (final):', speakerSpeeches && speakerSpeeches.length > 0);
+      if (speakerSpeeches && speakerSpeeches.length > 0) {
+        console.log('Setting speaker speeches:', speakerSpeeches);
+        setSpeakerSpeeches(speakerSpeeches);
+        
+        // Find where to insert the speech section (after section ID 1)
+        const insertIndex = editableAgenda.findIndex(item => 
+          normalizeSectionId(item.sectionId || item.agendaSectionId || item.agendaSection?.sectionId || 1) > 1
+        );
+        const actualInsertIndex = insertIndex === -1 ? editableAgenda.length : insertIndex;
+        console.log('Insert index for speeches:', actualInsertIndex);
+        
+        // Create speech section header (No section -> sectionId 1)
+        const speechSectionHeader = {
+          id: `speech-section-${Date.now()}`,
+          isSection: true,
+          sectionId: 1,
+          sectionName: 'PREPARED SPEECHES SESSION'
+        };
+        
+        // Create speech rows
+        const speechRows = speakerSpeeches.map((speech, index) => ({
+          id: `speech-${speech.speechId || Date.now()}-${index}`,
+          activity: speech.objective || 'Speech Objective',
+          minTime: parseInt(speech.minSpeechTime) || 0,
+          avgTime: Math.round(((parseInt(speech.minSpeechTime) || 0) + (parseInt(speech.maxSpeechTime) || 0)) / 2),
+          maxTime: parseInt(speech.maxSpeechTime) || 0,
+          userId: speech.userId || '',
+          meetingId: parseInt(meetingId),
+          isNew: false,
+          sectionId: 1,
+          isSpeechRow: true,
+          speechData: speech
+        }));
+        
+        console.log('Speech section header:', speechSectionHeader);
+        console.log('Speech rows:', speechRows);
+        
+        // Insert speech section and rows
+        editableAgenda.splice(actualInsertIndex, 0, speechSectionHeader, ...speechRows);
+        console.log('Updated agenda after inserting speeches:', editableAgenda);
+      } else {
+        console.log('No speaker speeches found or empty array');
+      }
       
       setAgendaData(editableAgenda);
     } catch (err) {
@@ -104,6 +275,11 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       console.warn('Failed to load agenda sections', e?.message);
     }
   };
+
+  // SpeakerSpeeches are now loaded as part of getAgenda, so this function is no longer needed
+  // const loadSpeakerSpeeches = async () => {
+  //   // Speeches are loaded via getAgenda API
+  // };
 
   const loadAvailableMembers = async () => {
     try {
@@ -224,25 +400,62 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
   };
 
   const handleAddRow = () => {
-    // Determine section for this new row: last declared section header, else current selected, else 1
+    // Determine insertion index: below selected row if any, else at bottom
+    const insertIndex = (selectedRowIndex != null) ? (selectedRowIndex + 1) : agendaData.length;
+    // Determine section for this new row based on selection context; else fallback to last header/current selected
     const lastSection = [...agendaData].reverse().find(r => r.isSection);
-    const effectiveSectionId = normalizeSectionId(lastSection?.sectionId || selectedSectionId || 1);
-    const newRow = {
-      id: `new-${Date.now()}`,
-      activity: '',
-      minTime: 0,
-      avgTime: 0,
-      maxTime: 0,
-      userId: '',
-      meetingId: parseInt(meetingId),
-      isNew: true,
-      sectionId: effectiveSectionId
-    };
+    const contextSectionId = (selectedRowIndex != null)
+      ? computeEffectiveSectionIdForIndex(selectedRowIndex)
+      : normalizeSectionId(lastSection?.sectionId || selectedSectionId || 1);
     
-    setAgendaData(prev => [...prev, newRow]);
+    // Check if we're in a speech section and auto-generate speech rows
+    const currentSectionName = selectedRowIndex != null ? getCurrentSectionName(selectedRowIndex) : (lastSection?.sectionName || '');
+    
+    if (isSpeechSection(currentSectionName) && speakerSpeeches.length > 0) {
+      // Auto-generate rows for all speakers
+      const speechRows = speakerSpeeches.map((speech, index) => ({
+        id: `speech-${Date.now()}-${index}`,
+        activity: `${speech.title || 'Speech'} - ${speech.objective || 'Speech Objective'}`, // Set activity for speech rows
+        minTime: parseInt(speech.minSpeechTime) || 0,
+        avgTime: calculateAverageTime(speech.minSpeechTime, speech.maxSpeechTime),
+        maxTime: parseInt(speech.maxSpeechTime) || 0,
+        userId: speech.user?.userId || speech.userId || '',
+        meetingId: parseInt(meetingId),
+        isNew: true,
+        sectionId: contextSectionId,
+        isSpeechRow: true,
+        speechData: speech
+      }));
+
+      setAgendaData(prev => {
+        const next = [...prev];
+        next.splice(insertIndex, 0, ...speechRows);
+        return next;
+      });
+    } else {
+      // Regular row
+      const newRow = {
+        id: `new-${Date.now()}`,
+        activity: '',
+        minTime: 0,
+        avgTime: 0,
+        maxTime: 0,
+        userId: '',
+        meetingId: parseInt(meetingId),
+        isNew: true,
+        sectionId: contextSectionId
+      };
+
+      setAgendaData(prev => {
+        const next = [...prev];
+        next.splice(insertIndex, 0, newRow);
+        return next;
+      });
+    }
   };
 
   const handleAddNoSectionRow = () => {
+    const insertIndex = (selectedRowIndex != null) ? (selectedRowIndex + 1) : agendaData.length;
     const newRow = {
       id: `new-${Date.now()}`,
       activity: '',
@@ -254,7 +467,11 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       isNew: true,
       sectionId: 1
     };
-    setAgendaData(prev => [...prev, newRow]);
+    setAgendaData(prev => {
+      const next = [...prev];
+      next.splice(insertIndex, 0, newRow);
+      return next;
+    });
   };
 
   const handleInputChange = (id, field, value) => {
@@ -296,6 +513,14 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
     try {
       await deleteAgendaSection(id);
       await loadAgendaSections();
+
+      // Remove any header markers for this section and reassign impacted rows
+      setAgendaData(prev => {
+        // remove header rows with this section id
+        const withoutHeaders = prev.filter(r => !(r.isSection && normalizeSectionId(r.sectionId) === normalizeSectionId(id)));
+        // recalc inheritance so rows that pointed to deleted section adopt the nearest header above or 1
+        return recalcSectionIdsFromHeaders(withoutHeaders);
+      });
     } catch (e) {
       console.error('Delete section failed', e?.response || e);
     }
@@ -324,7 +549,27 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       sectionId: sectionId,
       sectionName: name
     };
-    setAgendaData(prev => [...prev, headerRow]);
+    const insertIndex = (selectedRowIndex != null) ? (selectedRowIndex + 1) : agendaData.length;
+    setAgendaData(prev => {
+      const next = [...prev];
+      next.splice(insertIndex, 0, headerRow);
+      return recalcSectionIdsFromHeaders(next);
+    });
+  };
+
+  // Remove a section header row at a given index (does not delete the section entity)
+  const handleDeleteSectionHeaderAtIndex = (index) => {
+    setAgendaData(prev => {
+      if (!prev[index]?.isSection) return prev;
+      const next = prev.slice(0, index).concat(prev.slice(index + 1));
+      const recalced = recalcSectionIdsFromHeaders(next);
+      // adjust selection if needed
+      if (selectedRowIndex != null) {
+        const newSel = Math.min(recalced.length - 1, Math.max(0, selectedRowIndex - (index <= selectedRowIndex ? 1 : 0)));
+        setSelectedRowIndex(Number.isFinite(newSel) ? newSel : null);
+      }
+      return recalced;
+    });
   };
 
   // Drag and Drop handlers
@@ -354,7 +599,8 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
     const newOrder = [...agendaData];
     const [moved] = newOrder.splice(fromIndex, 1);
     newOrder.splice(dropIndex, 0, moved);
-    setAgendaData(newOrder);
+    // After reordering, ensure each data row's sectionId reflects the nearest header above
+    setAgendaData(recalcSectionIdsFromHeaders(newOrder));
     setDragIndex(null);
   };
 
@@ -375,13 +621,15 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
 
       // Prepare data for API - only send non-section rows with correct section inheritance
       const rowsToSave = [];
+      // Ensure we are using a recalculated list to avoid any invalid/deleted section ids
+      const workingList = recalcSectionIdsFromHeaders(agendaData);
       let currentSectionId = 1; // default section ID
       
       // Build rows to save and persist client-side order signature for next load
       const orderKey = `tm_agenda_order_${meetingId}`;
       const orderSignatures = [];
 
-      for (const row of agendaData) {
+      for (const row of workingList) {
         if (row.isSection) {
           // Explicit header row updates the running section
           currentSectionId = normalizeSectionId(row.sectionId);
@@ -597,19 +845,21 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                       let currentTime = 0; // Start time in minutes (assuming meeting starts at 0:00)
       
                       // Parse time string to minutes for calculation
-                      const parseTimeToMinutes = (timeStr) => {
-                        if (!timeStr || timeStr === '') return 0;
-        
+                      const parseTimeToMinutes = (timeVal) => {
+                        // Accept numbers, strings like '2:30', '150', etc.
+                        if (timeVal === null || timeVal === undefined || timeVal === '') return 0;
+                        if (typeof timeVal === 'number' && Number.isFinite(timeVal)) return timeVal;
+                        const timeStr = String(timeVal);
                         // Handle format like "2:30" or "2" or "30"
                         if (timeStr.includes(':')) {
                           const parts = timeStr.split(':');
                           const hours = parseInt(parts[0]) || 0;
                           const minutes = parseInt(parts[1]) || 0;
                           return hours * 60 + minutes;
-                        } else {
-                          // If no colon, treat as minutes
-                          return parseInt(timeStr) || 0;
                         }
+                        // If no colon, treat as minutes
+                        const mins = parseInt(timeStr);
+                        return Number.isFinite(mins) ? mins : 0;
                       };
 
                       // Calculate cumulative time for the "Time" column
@@ -627,9 +877,25 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
 
                       if (item.isSection) {
                         return (
-                          <tr key={item.id}>
-                            <td colSpan={7} className="text-center fw-bold" style={{ backgroundColor: '#f1f3f5' }}>
-                              {item.sectionName}
+                          <tr 
+                            key={item.id}
+                            onClick={() => setSelectedRowIndex(index)}
+                            className={selectedRowIndex === index ? 'table-primary' : ''}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <td colSpan={7} className="fw-bold" style={{ backgroundColor: '#f1f3f5' }}>
+                              <div className="d-flex justify-content-between align-items-center">
+                                <span className="w-100 text-center">{item.sectionName}</span>
+                                <Button 
+                                  variant="outline-danger" 
+                                  size="sm" 
+                                  className="ms-2"
+                                  title="Delete this section header marker"
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteSectionHeaderAtIndex(index); }}
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -666,6 +932,9 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                             onDragStart={(e) => handleDragStart(e, index)}
                             onDragOver={handleDragOver}
                             onDrop={(e) => handleDrop(e, index)}
+                            onClick={() => setSelectedRowIndex(index)}
+                            className={selectedRowIndex === index ? 'table-primary' : ''}
+                            style={{ cursor: 'pointer' }}
                           >
                             <td 
                               className="text-center align-middle"
@@ -699,13 +968,38 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                               />
                             </td>
                             <td onMouseDown={() => { allowDrag.current = true; }}>
-                              <Form.Control
-                                type="text"
-                                value={item.activity}
-                                onChange={(e) => handleInputChange(item.id, 'activity', e.target.value)}
-                                placeholder="Enter activity description"
-                                required
-                              />
+                              {item.isSpeechRow && item.speechData ? (
+                                <div className="d-flex">
+                                  <div style={{ width: '10%', padding: '2px' }}>
+                                    <small className="fw-bold text-primary">
+                                      {formatPathwaysTrack(item.speechData.pathwaysTrack)}
+                                    </small>
+                                  </div>
+                                  <div style={{ width: '10%', padding: '2px' }}>
+                                    <small className="fw-bold text-success">
+                                      {formatLevel(item.speechData.level)}
+                                    </small>
+                                  </div>
+                                  <div style={{ width: '10%', padding: '2px' }}>
+                                    <small className="fw-bold text-warning">
+                                      {formatProjectNo(item.speechData.projectNo)}
+                                    </small>
+                                  </div>
+                                  <div style={{ width: '70%', padding: '2px' }}>
+                                    <small className="text-muted">
+                                      {item.speechData.objective || 'Speech Objective'}
+                                    </small>
+                                  </div>
+                                </div>
+                              ) : (
+                                <Form.Control
+                                  type="text"
+                                  value={item.activity}
+                                  onChange={(e) => handleInputChange(item.id, 'activity', e.target.value)}
+                                  placeholder="Enter activity description"
+                                  required
+                                />
+                              )}
                             </td>
                             <td onMouseDown={() => { allowDrag.current = true; }}>
                               <Dropdown>

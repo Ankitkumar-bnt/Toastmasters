@@ -26,8 +26,16 @@ export const getAllSpeakerSpeech = async () => {
 };
 
 export const getSpeakerSpeechByMeeting = async (meetingId) => {
-  const response = await axios.get(`${BASE_URL}/getSpeakerSpeechByMeeting/${meetingId}`);
-  return response.data;
+  try {
+    const response = await axios.get(`${BASE_URL}/getSpeakerSpeechByMeeting/${meetingId}`);
+    return response.data;
+  } catch (error) {
+    if (error?.response?.status === 404) {
+      // Normalize to empty list for callers that expect arrays
+      return [];
+    }
+    throw error;
+  }
 };
 
 export const updateSpeakerSpeechByMeeting = async (meetingId, dto) => {

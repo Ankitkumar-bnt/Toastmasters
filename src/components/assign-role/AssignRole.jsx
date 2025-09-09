@@ -9,7 +9,7 @@ import { getMemberPreferredRoles, addMemberPreferredRole } from '../../api/Prefe
 import { getMemberAssignedRole, addMemberAssignedRole } from '../../api/AssignedRoleApi';
 import { getAllRoles, addRole, updateRole, deleteRole } from '../../api/RoleApi';
 import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
-import { getLast3MeetingRoles } from '../../api/AssignedRoleApi'; // Add this import
+import { getLast3MeetingRoles } from '../../api/MeetingRoleApi'; // Fixed import
 
 const AssignRole = () => {
   const [meetings, setMeetings] = useState([]);

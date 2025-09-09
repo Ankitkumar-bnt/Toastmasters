@@ -18,6 +18,7 @@ import {
   updateAbbreviationsById,
   deleteAbbreviationsById
 } from '../../api/AgendaJoinApi';
+import { getSpeakerSpeechByMeeting } from '../../api/SpeakerSpeechApi';
 import { getUserById } from '../../api/UserApi';
 import toastmastersLogo from '../../assets/img/toastmastersLogo.png';
 import { getAllAgendaSections } from '../../api/AgendaSectionApi';
@@ -59,6 +60,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   const [abbreviationsData, setAbbreviationsData] = useState([]);
   const [editingAbbreviations, setEditingAbbreviations] = useState([]);
   const [newAbbreviation, setNewAbbreviation] = useState({ abbreviation: '', meaning: '' });
+  const [speakerSpeeches, setSpeakerSpeeches] = useState([]);
 
   useEffect(() => {
     loadMeetings();
@@ -106,7 +108,98 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
 
     try {
       const response = await getAgenda(meeting.meetingId);
-      setAgendaData(response.data.data);
+      console.log('=== AGENDAVIEW API RESPONSE ===');
+      console.log('Full response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response data.data:', response.data.data);
+
+      let agendaResponse = response.data.data;
+      let speakerSpeeches = agendaResponse?.speakerSpeeches || [];
+
+      // Fallback to SpeakerSpeechApi if not present or empty
+      if (!Array.isArray(speakerSpeeches) || speakerSpeeches.length === 0) {
+        try {
+          console.log('AgendaView: fetching speakerSpeeches via SpeakerSpeechApi fallback...');
+          const ssResp = await getSpeakerSpeechByMeeting(meeting.meetingId);
+          const payload = ssResp?.data ?? ssResp;
+          speakerSpeeches = Array.isArray(payload) ? payload : [payload].filter(Boolean);
+          console.log('AgendaView: fetched speakerSpeeches via fallback:', speakerSpeeches);
+        } catch (e) {
+          console.warn('AgendaView: fallback fetch failed:', e?.response || e);
+          speakerSpeeches = [];
+        }
+      }
+
+      // Add PREPARED SPEECHES SESSION if speaker speeches exist
+      if (speakerSpeeches && speakerSpeeches.length > 0) {
+        setSpeakerSpeeches(speakerSpeeches);
+        
+        // Add speech rows to agenda if not already present
+        let agenda = agendaResponse?.agenda || [];
+        
+        // Check if a 'prepared speeches' section exists in agenda (by section name on any row)
+        const preparedRow = agenda.find(item => String(item?.agendaSection?.sectionName || '').toLowerCase().includes('prepared') && String(item?.agendaSection?.sectionName || '').toLowerCase().includes('speech'));
+        const hasSpeechSection = Boolean(preparedRow);
+        const preparedSectionId = hasSpeechSection ? (preparedRow?.agendaSection?.sectionId || preparedRow?.sectionId || 1) : 1;
+        
+        if (!hasSpeechSection) {
+          // Find where to insert the speech section (after section ID 1)
+          const insertIndex = agenda.findIndex(item => {
+            const sectionId = item.sectionId || item.agendaSectionId || item?.agendaSection?.sectionId || 1;
+            return sectionId > 1;
+          });
+          const actualInsertIndex = insertIndex === -1 ? agenda.length : insertIndex;
+
+          // Create explicit header row (sectionId 1 to align with 'No Section')
+          const speechHeader = {
+            agendaId: `speech-header-${Date.now()}`,
+            isSection: true,
+            sectionId: 1,
+            sectionName: 'PREPARED SPEECHES SESSION'
+          };
+
+          // Create speech rows
+          const speechRows = speakerSpeeches.map((speech, index) => ({
+            agendaId: `speech-${speech.speechId || Date.now()}-${index}`,
+            activity: speech.objective || 'Speech Objective',
+            minTime: parseInt(speech.minSpeechTime) || 0,
+            avgTime: Math.round(((parseInt(speech.minSpeechTime) || 0) + (parseInt(speech.maxSpeechTime) || 0)) / 2),
+            maxTime: parseInt(speech.maxSpeechTime) || 0,
+            userId: (speech?.user?.userId) || speech.userId || null,
+            sectionId: 1,
+            isSpeechRow: true,
+            speechData: speech
+          }));
+          
+          // Insert header + speech rows
+          agenda.splice(actualInsertIndex, 0, speechHeader, ...speechRows);
+          agendaResponse.agenda = agenda;
+        } else {
+          // Prepared section exists; insert rows under that section id without adding explicit header
+          const insertIndex = agenda.findIndex(item => {
+            const sid = item.sectionId || item.agendaSectionId || item?.agendaSection?.sectionId || 1;
+            return sid > preparedSectionId;
+          });
+          const actualInsertIndex = insertIndex === -1 ? agenda.length : insertIndex;
+          const speechRows = speakerSpeeches.map((speech, index) => ({
+            agendaId: `speech-${speech.speechId || Date.now()}-${index}`,
+            activity: speech.objective || 'Speech Objective',
+            minTime: parseInt(speech.minSpeechTime) || 0,
+            avgTime: Math.round(((parseInt(speech.minSpeechTime) || 0) + (parseInt(speech.maxSpeechTime) || 0)) / 2),
+            maxTime: parseInt(speech.maxSpeechTime) || 0,
+            userId: (speech?.user?.userId) || speech.userId || null,
+            sectionId: preparedSectionId,
+            isSpeechRow: true,
+            speechData: speech
+          }));
+          agenda.splice(actualInsertIndex, 0, ...speechRows);
+          agendaResponse.agenda = agenda;
+        }
+      } else {
+        setSpeakerSpeeches([]);
+      }
+      
+      setAgendaData(agendaResponse);
     } catch (err) {
       console.error('Error loading agenda:', err);
       if (err.code === 'ERR_NETWORK' || err.message.includes('CORS')) {
@@ -118,6 +211,11 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
       setLoading(false);
     }
   };
+
+  // SpeakerSpeeches are now loaded as part of getAgenda
+  // const loadSpeakerSpeeches = async (meetingId) => {
+  //   // Speeches are loaded via getAgenda API
+  // };
 
   // When coming back from UpdateAgenda, restore the previously selected meeting
   useEffect(() => {
@@ -618,16 +716,49 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
     );
   };
 
-  const AgendaTableRow = ({ item, currentTime }) => {
-    const [presenterName, setPresenterName] = useState("Loading...");
+  // Helper functions for speech sections
+  const isSpeechSection = (sectionName) => {
+    if (!sectionName) return false;
+    const name = sectionName.toLowerCase();
+    return name.includes('speech');
+  };
 
+  const formatPathwaysTrack = (track) => {
+    if (!track) return '';
+    return track.split(' ').map(word => word.charAt(0).toUpperCase()).join('');
+  };
+
+  const formatLevel = (level) => {
+    if (!level) return '';
+    return `L${level}`;
+  };
+
+  const formatProjectNo = (projectNo) => {
+    if (!projectNo) return '';
+    const num = parseInt(projectNo);
+    return Number.isFinite(num) ? `P${num}` : projectNo;
+  };
+
+  const AgendaTableRow = ({ item, currentTime, sectionName }) => {
+    const [presenterName, setPresenterName] = useState("Loading...");
     useEffect(() => {
       const loadPresenter = async () => {
+        if (!item?.userId) {
+          setPresenterName("N/A");
+          return;
+        }
         const user = await fetchUserData(item.userId);
-        setPresenterName(user.userName || "N/A");
+        setPresenterName(user?.userName || "N/A");
       };
       loadPresenter();
-    }, [item.userId]);
+    }, [item?.userId]);
+
+    // Check if this is a speech section and find matching speech data
+    const isInSpeechSection = isSpeechSection(sectionName);
+    const matchingSpeech = isInSpeechSection ? 
+      speakerSpeeches.find(speech => 
+        (speech.user?.userId || speech.userId) === item.userId
+      ) : null;
 
     return (
       <tr>
@@ -648,7 +779,64 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
             </>
           );
         })()}
-        <td className="text-start">{item.activity}</td>
+        <td className="text-start">
+          {item.isSpeechRow && item.speechData ? (
+            <div className="d-flex">
+              <div style={{ width: '10%', padding: '2px' }}>
+                <small className="fw-bold text-primary">
+                  {formatPathwaysTrack(item.speechData.pathwaysTrack)}
+                </small>
+              </div>
+              <div style={{ width: '10%', padding: '2px' }}>
+                <small className="fw-bold text-success">
+                  {formatLevel(item.speechData.level)}
+                </small>
+              </div>
+              <div style={{ width: '10%', padding: '2px' }}>
+                <small className="fw-bold text-warning">
+                  {formatProjectNo(item.speechData.projectNo)}
+                </small>
+              </div>
+              <div style={{ width: '70%', padding: '2px' }}>
+                <small className="text-muted">
+                  {item.speechData.objective || 'Speech Objective'}
+                </small>
+              </div>
+            </div>
+          ) : (
+            matchingSpeech ? (
+              <div>
+                <div className="d-flex mb-1">
+                  <div style={{ width: '15%', padding: '2px' }}>
+                    <small className="fw-bold text-primary">
+                      {formatPathwaysTrack(matchingSpeech.pathwaysTrack)}
+                    </small>
+                  </div>
+                  <div style={{ width: '15%', padding: '2px' }}>
+                    <small className="fw-bold text-success">
+                      {formatLevel(matchingSpeech.level)}
+                    </small>
+                  </div>
+                  <div style={{ width: '15%', padding: '2px' }}>
+                    <small className="fw-bold text-warning">
+                      {formatProjectNo(matchingSpeech.projectNo)}
+                    </small>
+                  </div>
+                  <div style={{ width: '55%', padding: '2px' }}>
+                    <small className="text-muted">
+                      {matchingSpeech.title || 'Speech Title'}
+                    </small>
+                  </div>
+                </div>
+                <div className="text-muted small">
+                  {matchingSpeech.objective || 'Speech Objective'}
+                </div>
+              </div>
+            ) : (
+              item.activity
+            )
+          )}
+        </td>
         <td className="text-start">{presenterName}</td>
       </tr>
     );
@@ -731,8 +919,23 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
             </thead>
             <tbody className='text-center'>
               {agendaData.agenda.map((item, index) => {
+                // Render explicit section header rows (e.g., PREPARED SPEECHES SESSION)
+                if (item?.isSection) {
+                  return (
+                    <tr key={`sec-explicit-${item.sectionId || index}`}>
+                      <td colSpan={6} className="text-center fw-bold" style={{ backgroundColor: '#f1f3f5' }}>
+                        {item.sectionName || sectionById[item.sectionId] || 'Section'}
+                      </td>
+                    </tr>
+                  );
+                }
+
                 const rowTime = formatTime(currentTime);
-                currentTime = new Date(currentTime.getTime() + item.maxTime * 60000);
+                // Only advance time for data rows with a numeric maxTime
+                const maxMins = parseInt(item.maxTime);
+                if (Number.isFinite(maxMins)) {
+                  currentTime = new Date(currentTime.getTime() + maxMins * 60000);
+                }
 
                 const normalizeId = (v) => {
                   const n = parseInt(v);
@@ -744,6 +947,21 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
                 const showHeader = currSectionId !== 1 && currSectionId !== prevSectionId;
                 const secName = sectionById[currSectionId];
 
+                // Get current section name for this row (look backwards for the current section)
+                let currentSectionName = secName;
+                if (!currentSectionName) {
+                  // Look backwards to find the current section
+                  for (let i = index; i >= 0; i--) {
+                    const prevItem = agendaData.agenda[i];
+                    const prevSecId = getSectionId(prevItem);
+                    const prevSecName = sectionById[prevSecId];
+                    if (prevSecName) {
+                      currentSectionName = prevSecName;
+                      break;
+                    }
+                  }
+                }
+
                 const blockKey = `rowblock-${item.agendaId || item.id || index}`;
                 return (
                   <React.Fragment key={blockKey}>
@@ -754,7 +972,12 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
                         </td>
                       </tr>
                     )}
-                    <AgendaTableRow key={`row-${item.agendaId || item.id || index}`} item={item} currentTime={rowTime} />
+                    <AgendaTableRow 
+                      key={`row-${item.agendaId || item.id || index}`} 
+                      item={item} 
+                      currentTime={rowTime} 
+                      sectionName={currentSectionName || ''}
+                    />
                   </React.Fragment>
                 );
               })}

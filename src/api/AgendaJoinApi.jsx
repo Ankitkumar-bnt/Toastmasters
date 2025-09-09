@@ -342,7 +342,12 @@ export const getSpeakerSpeechesByMeeting = async (meetingId) => {
   try {
     return await axios.get(`${API_BASE_URL}/getSpeakerSpeechesByMeeting/${meetingId}`);
   } catch (error) {
-    console.error('Get Speaker Speeches By Meeting API error:', error?.response || error);
+    // Treat 404 as "no data" rather than an exception to reduce console noise
+    if (error?.response?.status === 404) {
+      // Return a minimal axios-like shape that callers already handle
+      return { data: [] };
+    }
+    console.warn('Get Speaker Speeches By Meeting API error:', error?.response || error);
     throw error;
   }
 };
