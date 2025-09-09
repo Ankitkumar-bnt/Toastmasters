@@ -56,8 +56,13 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
           row.sectionName = defaultSection?.sectionName || 'No Section';
         }
       } else {
-        // For data rows, always use the current flowing section
-        row.sectionId = normalizeSectionId(current || 1);
+        // For data rows, preserve a valid existing sectionId; otherwise inherit from current header
+        const existing = normalizeSectionId(row.sectionId || row.agendaSectionId || row?.agendaSection?.sectionId || 0);
+        if (validIds.has(existing)) {
+          row.sectionId = existing;
+        } else {
+          row.sectionId = normalizeSectionId(current || 1);
+        }
       }
     }
     return next;
@@ -529,10 +534,50 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
   const handleAddSection = async () => {
     try {
       if (!newSectionName || !newSectionName.trim()) return;
-      await addAgendaSection({ sectionName: newSectionName.trim() });
+      const createdResp = await addAgendaSection({ sectionName: newSectionName.trim() });
+      const createdName = newSectionName.trim();
       setNewSectionName('');
       setShowAddSectionModal(false);
-      await loadAgendaSections();
+
+      // Reload sections and then auto-insert a header marker for the newly created section
+      try {
+        const resp = await getAllAgendaSections();
+        const list = Array.isArray(resp)
+          ? resp
+          : Array.isArray(resp?.data)
+            ? resp.data
+            : Array.isArray(resp?.data?.data)
+              ? resp.data.data
+              : [];
+        setSections(list);
+        const map = {};
+        list.forEach(s => { map[(s.sectionId || s.id)] = s.sectionName; });
+        setSectionById(map);
+
+        // Find the newly created section by name
+        const newlyCreated = list.find(s => String(s.sectionName).trim().toLowerCase() === createdName.toLowerCase());
+        const newId = newlyCreated ? (newlyCreated.sectionId || newlyCreated.id) : null;
+        if (newId) {
+          setSelectedSectionId(newId);
+          // Insert a header marker for this section at the current context
+          const headerRow = {
+            id: `section-${newId}-${Date.now()}`,
+            isSection: true,
+            sectionId: normalizeSectionId(newId),
+            sectionName: newlyCreated.sectionName
+          };
+          setAgendaData(prev => {
+            const next = [...prev];
+            const insertIndex = (selectedRowIndex != null) ? (selectedRowIndex + 1) : next.length;
+            next.splice(insertIndex, 0, headerRow);
+            return recalcSectionIdsFromHeaders(next);
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to reload sections after create', e?.message);
+        // Fallback: still reload via existing helper
+        await loadAgendaSections();
+      }
     } catch (e) {
       console.error('Add section failed', e?.response || e);
     }
@@ -609,8 +654,8 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       setSaving(true);
       setError(null);
       
-      // Validate required fields (ignore section header rows)
-      const invalidRows = agendaData.filter(row => !row.isSection).filter(row => 
+      // Validate required fields (ignore section header rows and dynamic speech rows)
+      const invalidRows = agendaData.filter(row => !row.isSection && !row.isSpeechRow).filter(row => 
         !String(row.activity || '').trim() || !row.userId || (parseInt(row.maxTime) || 0) <= 0
       );
       
@@ -635,14 +680,13 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
           currentSectionId = normalizeSectionId(row.sectionId);
           continue;
         }
+        // Skip dynamic speech rows from being persisted to backend
+        if (row.isSpeechRow) {
+          continue;
+        }
 
         // Prefer the row's own sectionId if present; else use the running section; else default 1
         const effectiveRowSectionId = normalizeSectionId(row.sectionId || currentSectionId || 1);
-
-        // If this row explicitly carried a sectionId, update the running section for subsequent rows
-        if (row.sectionId) {
-          currentSectionId = effectiveRowSectionId;
-        }
 
         const payload = {
           activity: row.activity,
@@ -655,7 +699,7 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
         };
         rowsToSave.push(payload);
 
-        // push signature to persist order client-side
+        // push signature to persist order client-side (only for persisted rows)
         orderSignatures.push(`${payload.activity || ''}|${payload.userId || ''}|${payload.minTime || ''}|${payload.maxTime || ''}|${payload.sectionId || 1}`);
       }
 
