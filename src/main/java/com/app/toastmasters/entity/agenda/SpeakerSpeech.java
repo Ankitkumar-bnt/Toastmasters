@@ -23,13 +23,13 @@ public class SpeakerSpeech {
     @Column(nullable = false)
     private String pathwaysTrack;
     @Column(nullable = false)
-    private int level;
+    private String level;
     @Column(nullable = false)
-    private int projectNo;
+    private String projectNo;
     @Column(nullable = false)
-    private int maxSpeechTime;
+    private String maxSpeechTime;
     @Column(nullable = false)
-    private int minSpeechTime;
+    private String minSpeechTime;
     @Column(nullable = false)
     private String title;
     private String objective;

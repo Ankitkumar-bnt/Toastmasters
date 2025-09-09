@@ -10,10 +10,10 @@ import java.time.LocalDateTime;
 public class SpeakerSpeechResponseDTO {
     private int speechId;
     private String pathwaysTrack;
-    private int level;
-    private int projectNo;
-    private int maxSpeechTime;
-    private int minSpeechTime;
+    private String level;
+    private String projectNo;
+    private String maxSpeechTime;
+    private String minSpeechTime;
     private String title;
     private String objective;
     private LocalDateTime speechCreatedDate;

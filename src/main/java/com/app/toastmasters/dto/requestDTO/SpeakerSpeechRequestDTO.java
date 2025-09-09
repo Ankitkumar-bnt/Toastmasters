@@ -9,10 +9,10 @@ import java.time.LocalDateTime;
 @Setter
 public class SpeakerSpeechRequestDTO {
     private String pathwaysTrack;
-    private int level;
-    private int projectNo;
-    private int maxSpeechTime;
-    private int minSpeechTime;
+    private String level;
+    private String projectNo;
+    private String maxSpeechTime;
+    private String minSpeechTime;
     private String title;
     private String objective;
     private int userId;

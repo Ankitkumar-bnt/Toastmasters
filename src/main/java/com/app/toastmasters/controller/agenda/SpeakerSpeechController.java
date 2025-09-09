@@ -33,20 +33,20 @@ public class SpeakerSpeechController {
     }
 
     @GetMapping("/getSpeakerSpeechByMeeting/{meetingId}")
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByMeeting(
+    public ResponseEntity<ResponseMessage<List<SpeakerSpeechResponseDTO>>> getSpeakerSpeechByMeeting(
             @PathVariable int meetingId){
         return speakerSpeechService.getSpeakerSpeechByMeeting(meetingId);
     }
 
-    @DeleteMapping("/deleteSpeakerSpeechByMeeting/{meetingId}")
+    @DeleteMapping("/deleteSpeakerSpeechByMeeting/{userId}/{meetingId}")
     public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByMeeting(
-            @PathVariable int meetingId){
-        return speakerSpeechService.deleteSpeakerSpeechByMeeting(meetingId);
+            @PathVariable int userId, @PathVariable int meetingId){
+        return speakerSpeechService.deleteSpeakerSpeechByMeeting(userId, meetingId);
     }
 
-    @PutMapping("/updateSpeakerSpeechByMeeting/{meetingId}")
+    @PutMapping("/updateSpeakerSpeechByMeeting/{userId}/{meetingId}")
     public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByMeeting(
-            @RequestBody SpeakerSpeechRequestDTO speakerSpeechRequestDTO, @PathVariable int meetingId){
-        return speakerSpeechService.updateSpeakerSpeechByMeeting(speakerSpeechRequestDTO, meetingId);
+            @RequestBody SpeakerSpeechRequestDTO speakerSpeechRequestDTO, @PathVariable int userId, @PathVariable int meetingId){
+        return speakerSpeechService.updateSpeakerSpeechByMeeting(speakerSpeechRequestDTO, userId, meetingId);
     }
 }

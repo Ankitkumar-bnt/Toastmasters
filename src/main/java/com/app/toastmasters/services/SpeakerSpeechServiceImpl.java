@@ -53,20 +53,22 @@ public class SpeakerSpeechServiceImpl implements SpeakerSpeechService {
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> getSpeakerSpeechByMeeting(int meetingId) {
-        Optional<SpeakerSpeech> optionalSpeech = speakerSpeechRepository.findByMeeting_MeetingId(meetingId);
+    public ResponseEntity<ResponseMessage<List<SpeakerSpeechResponseDTO>>> getSpeakerSpeechByMeeting(int meetingId) {
+        List<SpeakerSpeech> speechList = speakerSpeechRepository.findByMeeting_MeetingId(meetingId);
 
-        if (optionalSpeech.isEmpty())
+        if (speechList.isEmpty())
             throw new SpeakerSpeechNotFoundException(Constant.SPEAKER_SPEECH_NOT_FOUND);
 
-        ResponseMessage<SpeakerSpeechResponseDTO> responseMessage =
-                new ResponseMessage<>(HttpStatus.OK, Constant.FOUND_SPEAKER_SPEECH, mapper.toDTO(optionalSpeech.get()));
+        ResponseMessage<List<SpeakerSpeechResponseDTO>> responseMessage =
+                new ResponseMessage<List<SpeakerSpeechResponseDTO>>(HttpStatus.OK, Constant.FOUND_SPEAKER_SPEECH,
+                        speechList.stream().map(x->mapper.toDTO(x))
+                                .collect(Collectors.toList()));
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 
     @Override
-    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByMeeting(int meetingId) {
-        Optional<SpeakerSpeech> optionalSpeech = speakerSpeechRepository.findByMeeting_MeetingId(meetingId);
+    public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> deleteSpeakerSpeechByMeeting(int userId, int meetingId) {
+        Optional<SpeakerSpeech> optionalSpeech = speakerSpeechRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
 
         if (optionalSpeech.isEmpty())
             throw new SpeakerSpeechNotFoundException(Constant.SPEAKER_SPEECH_NOT_FOUND);
@@ -80,14 +82,14 @@ public class SpeakerSpeechServiceImpl implements SpeakerSpeechService {
 
     @Override
     public ResponseEntity<ResponseMessage<SpeakerSpeechResponseDTO>> updateSpeakerSpeechByMeeting(
-            SpeakerSpeechRequestDTO speakerSpeechRequestDTO, int meetingId) {
+            SpeakerSpeechRequestDTO speakerSpeechRequestDTO,int userId, int meetingId) {
 
         if (speakerSpeechRequestDTO == null) {
             throw new EmptyObjectException(Constant.EMPTY_OBJECT);
         }
 
         Optional<SpeakerSpeech> optionalSpeech =
-                speakerSpeechRepository.findByMeeting_MeetingId(meetingId);
+                speakerSpeechRepository.findByUser_UserIdAndMeeting_MeetingId(userId, meetingId);
 
         if (optionalSpeech.isEmpty()) {
             throw new SpeakerSpeechNotFoundException(Constant.SPEAKER_SPEECH_NOT_FOUND);
@@ -98,16 +100,16 @@ public class SpeakerSpeechServiceImpl implements SpeakerSpeechService {
         if (speakerSpeechRequestDTO.getPathwaysTrack() != null)
             existingSpeech.setPathwaysTrack(speakerSpeechRequestDTO.getPathwaysTrack());
 
-        if (speakerSpeechRequestDTO.getLevel() > 0)
+        if (speakerSpeechRequestDTO.getLevel() != null)
             existingSpeech.setLevel(speakerSpeechRequestDTO.getLevel());
 
-        if (speakerSpeechRequestDTO.getProjectNo() > 0)
+        if (speakerSpeechRequestDTO.getProjectNo() != null)
             existingSpeech.setProjectNo(speakerSpeechRequestDTO.getProjectNo());
 
-        if (speakerSpeechRequestDTO.getMaxSpeechTime() > 0)
+        if (speakerSpeechRequestDTO.getMaxSpeechTime() != null)
             existingSpeech.setMaxSpeechTime(speakerSpeechRequestDTO.getMaxSpeechTime());
 
-        if (speakerSpeechRequestDTO.getMinSpeechTime() > 0)
+        if (speakerSpeechRequestDTO.getMinSpeechTime() != null)
             existingSpeech.setMinSpeechTime(speakerSpeechRequestDTO.getMinSpeechTime());
 
         if (speakerSpeechRequestDTO.getTitle() != null)
