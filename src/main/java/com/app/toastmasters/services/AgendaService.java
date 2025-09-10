@@ -13,4 +13,6 @@ public interface AgendaService {
     ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAllAgendaRows();
 
     ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> getAgendaRowsByMeeting(int meetingId);
+
+    ResponseEntity<ResponseMessage<List<AgendaResponseDTO>>> copyAgendaByMeeting(int fromMeetingId, int toMeetingId);
 }
