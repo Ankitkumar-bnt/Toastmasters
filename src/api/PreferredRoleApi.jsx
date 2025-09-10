@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8888';
+const BASE_URL = '/api';
 
 // Add member preferred roles
 export const addMemberPreferredRole = async (userId, meetingId, preferredRoleList) => {

@@ -1148,7 +1148,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
           <p>
             <strong>Club Mission:</strong>{" "}
             {getStaticInfo('Club Mission') ||
-              'We provide a supportive and positive learning experience in which members are empowered to develop communication and leadership skills, resulting in greater self-confidence and personal growth.'}
+              'We provide a supportive and positive learning experience in which members are empowered to develop communication and leadership skills, resulting in greater self confidence and personal growth.'}
           </p>
         </div>
       </Card.Body>

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8888/agenda';
+const BASE_URL = '/api/agenda';
 
 // DTO shape assumption based on backend: {
 //   word: string,

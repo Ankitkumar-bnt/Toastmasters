@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Controller has no class-level @RequestMapping, so endpoints are at API root
-const BASE_URL = 'http://localhost:8888';
+const BASE_URL = '/api';
 
 export const addMeetingRoles = async (meetingId, rolesMap) => {
   // rolesMap should be an object map of { [roleName:string]: number }

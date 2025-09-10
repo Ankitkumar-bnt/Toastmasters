@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8888/agenda';
+const BASE_URL = '/api/agenda';
 
 // AgendaSection API client based on AgendaSectionController
 // DTO assumption: { sectionName: string }

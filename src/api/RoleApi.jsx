@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8888/roles';
+const BASE_URL = '/api/roles';
 
 // Add a new role
 export const addRole = async (roleData) => {

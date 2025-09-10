@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8888/availableMembers';
+const API_BASE_URL = '/api/availableMembers';
 
 export const markAvailability = async (availability, userId, meetingId) => {
 	return axios.post(

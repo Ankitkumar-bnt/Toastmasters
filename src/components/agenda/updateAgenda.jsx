@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Row, Col, Card, Table, Button, Form, Alert, Spinner, Dropdown, Modal } from 'react-bootstrap';
-import { Clock, Plus, Save, ArrowLeft, Trash2 } from 'lucide-react';
-import { getAgenda, addAgendaRows } from '../../api/AgendaJoinApi';
+import { Clock, Plus, Save, ArrowLeft, Trash2, Download } from 'lucide-react';
+import { getAgenda, addAgendaRows, copyAgendaByMeeting } from '../../api/AgendaJoinApi';
 import { getUserById, getAllMembers } from '../../api/UserApi';
 import { getAllMemberAvailability } from '../../api/AvailableMembersApi';
+import { getMeetingById, getAllUpcomingMeetings } from '../../api/MeetingApi';
 import { getAllAgendaSections, addAgendaSection, updateAgendaSection, deleteAgendaSection } from '../../api/AgendaSectionApi';
 import { getSpeakerSpeechByMeeting } from '../../api/SpeakerSpeechApi';
 
@@ -28,10 +29,50 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
   const [editingSectionNames, setEditingSectionNames] = useState({}); // { [id]: name }
   const [selectedRowIndex, setSelectedRowIndex] = useState(null); // index of the row clicked/selected
   const [speakerSpeeches, setSpeakerSpeeches] = useState([]); // speaker speech data for the meeting
+  const [meetingInfo, setMeetingInfo] = useState(null); // holds meeting date/time
+  // Import Agenda modal state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [fromMeetingId, setFromMeetingId] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [meetingsList, setMeetingsList] = useState([]);
 
   const normalizeSectionId = (v) => {
     const n = parseInt(v);
     return Number.isFinite(n) && n > 0 ? n : 1;
+  };
+
+  const loadMeetingsList = async () => {
+    try {
+      const resp = await getAllUpcomingMeetings();
+      const list = resp?.data?.data || resp?.data || [];
+      setMeetingsList(Array.isArray(list) ? list : []);
+    } catch (e) {
+      console.warn('Failed to load meetings list for import agenda', e?.message);
+      setMeetingsList([]);
+    }
+  };
+
+  const handleImportAgenda = async () => {
+    if (!fromMeetingId || !meetingId) return;
+    try {
+      setImporting(true);
+      setError(null);
+      await copyAgendaByMeeting(parseInt(fromMeetingId), parseInt(meetingId));
+      await loadAgendaData();
+      setShowImportModal(false);
+      setFromMeetingId('');
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 1500);
+    } catch (err) {
+      console.error('Import agenda failed:', err?.response || err);
+      const data = err?.response?.data;
+      let msg = err?.message || 'Failed to import agenda. Please try again.';
+      if (typeof data === 'string' && data.trim()) msg = data;
+      else if (data && typeof data === 'object') msg = data.message || data.error || JSON.stringify(data);
+      setError(msg);
+    } finally {
+      setImporting(false);
+    }
   };
 
   // Recalculate all data rows' sectionId based on the flow of headers
@@ -138,11 +179,25 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
 
   useEffect(() => {
     if (meetingId) {
+      loadMeetingInfo();
       loadAgendaData();
       loadAvailableMembers();
       loadAgendaSections();
+      loadMeetingsList();
     }
   }, [meetingId]);
+
+  const loadMeetingInfo = async () => {
+    try {
+      const resp = await getMeetingById(meetingId);
+      // Handle common response wrappers
+      const data = resp?.data?.data || resp?.data || resp;
+      setMeetingInfo(data);
+    } catch (e) {
+      console.warn('Failed to load meeting info for dynamic time:', e?.message);
+      setMeetingInfo(null);
+    }
+  };
 
   const loadAgendaData = async () => {
     try {
@@ -241,8 +296,20 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
         console.log('Speech section header:', speechSectionHeader);
         console.log('Speech rows:', speechRows);
         
-        // Insert speech section and rows
-        editableAgenda.splice(actualInsertIndex, 0, speechSectionHeader, ...speechRows);
+        // Prepend an empty normal row at the very top so the first line is editable
+        const emptyTopRow = {
+          id: `new-${Date.now()}`,
+          activity: '',
+          minTime: 0,
+          avgTime: 0,
+          maxTime: 0,
+          userId: '',
+          meetingId: parseInt(meetingId),
+          isNew: true,
+          sectionId: 1
+        };
+        // Rebuild agenda so order is: empty row, speech header + rows, then rest of agenda
+        editableAgenda = [emptyTopRow, speechSectionHeader, ...speechRows, ...editableAgenda];
         console.log('Updated agenda after inserting speeches:', editableAgenda);
       } else {
         console.log('No speaker speeches found or empty array');
@@ -655,9 +722,22 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       setError(null);
       
       // Validate required fields (ignore section header rows and dynamic speech rows)
-      const invalidRows = agendaData.filter(row => !row.isSection && !row.isSpeechRow).filter(row => 
-        !String(row.activity || '').trim() || !row.userId || (parseInt(row.maxTime) || 0) <= 0
-      );
+      const isEmptyRow = (row) => {
+        const act = String(row.activity || '').trim();
+        const uid = row.userId;
+        const min = parseInt(row.minTime) || 0;
+        const avg = parseInt(row.avgTime) || 0;
+        const max = parseInt(row.maxTime) || 0;
+        return act === '' && (!uid || String(uid).trim() === '') && min === 0 && avg === 0 && max === 0;
+      };
+      const invalidRows = agendaData
+        .filter(row => !row.isSection && !row.isSpeechRow)
+        .filter(row => {
+          // Skip fully empty helper rows
+          if (isEmptyRow(row)) return false;
+          // Otherwise require fields
+          return !String(row.activity || '').trim() || !row.userId || (parseInt(row.maxTime) || 0) <= 0;
+        });
       
       if (invalidRows.length > 0) {
         setError('Please fill in all required fields (Activity, Presenter, and Max Time) for all rows.');
@@ -684,6 +764,10 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
         if (row.isSpeechRow) {
           continue;
         }
+        // Skip fully empty helper rows
+        if (isEmptyRow(row)) {
+          continue;
+        }
 
         // Prefer the row's own sectionId if present; else use the running section; else default 1
         const effectiveRowSectionId = normalizeSectionId(row.sectionId || currentSectionId || 1);
@@ -704,6 +788,11 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       }
 
       console.log('Submitting agenda rows:', rowsToSave);
+      // Prevent calling API with nothing to save
+      if (!rowsToSave.length) {
+        setError('Please add at least one agenda row (Activity, Presenter, Max Time) before saving.');
+        return;
+      }
 
       await addAgendaRows(rowsToSave);
 
@@ -717,8 +806,19 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       
     } catch (err) {
       console.error('Error saving agenda:', err?.response || err);
-      const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Failed to save agenda. Please try again.';
-      setError(String(msg));
+      // Extract the most helpful message
+      const data = err?.response?.data;
+      let msg = err?.message || 'Failed to save agenda. Please try again.';
+      if (typeof data === 'string' && data.trim()) {
+        msg = data;
+      } else if (data && typeof data === 'object') {
+        msg = data.message || data.error || JSON.stringify(data);
+      }
+      // Friendly fallback for 400/422/500
+      if (err?.response?.status >= 500 && rowsToSave?.length === 0) {
+        msg = 'Please add at least one agenda row (Activity, Presenter, Max Time) before saving.';
+      }
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -831,27 +931,57 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                 >
                   Manage Sections
                 </Button>
-                <Button 
+                <Button
                   variant="light"
                   className="text-dark"
                   size="sm"
-                  onClick={handleSave}
-                  disabled={saving || agendaData.length === 0}
+                  onClick={() => setShowImportModal(true)}
                 >
-                  {saving ? (
-                    <>
-                      <Spinner animation="border" size="sm" className="me-1" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save size={16} className="me-1" />
-                      Save
-                    </>
-                  )}
+                  <Download size={16} className="me-1" />
+                  Import Agenda
                 </Button>
               </div>
             </Card.Header>
+
+            {/* Import Agenda Modal */}
+            <Modal show={showImportModal} onHide={() => setShowImportModal(false)} centered>
+              <Modal.Header closeButton>
+                <Modal.Title>Import Agenda From Previous Meeting</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <Form.Group className="mb-3">
+                  <Form.Label>Select source meeting</Form.Label>
+                  <Form.Select
+                    value={fromMeetingId}
+                    onChange={(e) => setFromMeetingId(e.target.value)}
+                  >
+                    <option value="">-- Select Meeting --</option>
+                    {meetingsList
+                      .filter(m => String(m.meetingId) !== String(meetingId))
+                      .map(m => (
+                        <option key={m.meetingId} value={m.meetingId}>
+                          {`${m.meetingId} - ${m.meetingDate} - ${m.meetingTheme || ''} ${m.category && m.category !== 'Regular' ? `(${m.category})` : ''}`}
+                        </option>
+                      ))}
+                  </Form.Select>
+                  <div className="form-text">Imports agenda items from the selected meeting into this meeting.</div>
+                </Form.Group>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowImportModal(false)} disabled={importing}>Cancel</Button>
+                <Button variant="primary" onClick={handleImportAgenda} disabled={!fromMeetingId || importing}>
+                  {importing ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-1" /> Importing...
+                    </>
+                  ) : (
+                    <>
+                      <Download size={16} className="me-1" /> Import
+                    </>
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal>
             
             <Card.Body>
               {error && (
@@ -885,8 +1015,8 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                   </thead>
                   <tbody>
                     {agendaData.map((item, index) => {
-                      // Calculate time for this row
-                      let currentTime = 0; // Start time in minutes (assuming meeting starts at 0:00)
+                      // Calculate time offset for this row (in minutes) based on cumulative maxTime above)
+                      let currentMinutesOffset = 0;
       
                       // Parse time string to minutes for calculation
                       const parseTimeToMinutes = (timeVal) => {
@@ -906,17 +1036,22 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                         return Number.isFinite(mins) ? mins : 0;
                       };
 
-                      // Calculate cumulative time for the "Time" column
+                      // Sum previous rows' maxTime
                       for (let i = 0; i < index; i++) {
-                        currentTime += parseTimeToMinutes(agendaData[i].maxTime);
+                        currentMinutesOffset += parseTimeToMinutes(agendaData[i].maxTime);
                       }
 
-                      const formatTime = (minutes) => {
-                        const hours = Math.floor(minutes / 60);
-                        const mins = minutes % 60;
+                      // Format time by adding offset to the actual meeting start datetime
+                      const formatTimeFromStart = (offsetMinutes) => {
+                        if (!meetingInfo?.meetingDate || !meetingInfo?.startTime) return '--:--';
+                        const base = new Date(`${meetingInfo.meetingDate}T${meetingInfo.startTime}`);
+                        if (isNaN(base.getTime())) return '--:--';
+                        const dt = new Date(base.getTime() + offsetMinutes * 60000);
+                        const hours = dt.getHours();
+                        const minutes = dt.getMinutes().toString().padStart(2, '0');
+                        const ampm = hours >= 12 ? 'PM' : 'AM';
                         const displayHour = hours % 12 || 12;
-                        const ampm = hours >= 12 ? "PM" : "AM";
-                        return `${displayHour}:${mins.toString().padStart(2, "0")} ${ampm}`;
+                        return `${displayHour}:${minutes} ${ampm}`;
                       };
 
                       if (item.isSection) {
@@ -984,7 +1119,7 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                               className="text-center align-middle"
                               onMouseDown={() => { allowDrag.current = false; }}
                             >
-                              <strong>{formatTime(currentTime)}</strong>
+                              <strong>{formatTimeFromStart(currentMinutesOffset)}</strong>
                             </td>
                             <td onMouseDown={() => { allowDrag.current = true; }}>
                               <Form.Control

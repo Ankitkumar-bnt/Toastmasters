@@ -85,14 +85,13 @@ export default function AssignedSpeech({ onBack }) {
         }
         setMeetings(results);
 
-        // Preload existing speeches for each meeting
+        // Preload existing speeches (list) for each meeting
         const existing = {};
         for (const m of results) {
           try {
             const speechResp = await getSpeakerSpeechByMeeting(m.meetingId);
-            // Controller signature suggests single object wrapped; be flexible
-            const speech = speechResp?.data || speechResp;
-            existing[m.meetingId] = speech ? [speech] : [];
+            const list = pickArray(speechResp);
+            existing[m.meetingId] = list;
           } catch (err) {
             console.warn('Failed to load existing speech for meeting', m.meetingId, err?.message, err?.response?.data);
           }
@@ -110,12 +109,12 @@ export default function AssignedSpeech({ onBack }) {
 
   const alreadyAdded = (meetingId) => {
     const items = existingByMeeting[meetingId] || [];
-    return items.length > 0;
+    return (items || []).some(i => (i?.userId || i?.user?.userId || i?.user?.id) === userId);
   };
 
   const getExistingSpeech = (meetingId) => {
     const items = existingByMeeting[meetingId] || [];
-    return items[0] || null;
+    return (items || []).find(i => (i?.userId || i?.user?.userId || i?.user?.id) === userId) || null;
   };
 
   const isMeetingPast = (meeting) => {
@@ -179,29 +178,37 @@ export default function AssignedSpeech({ onBack }) {
       // Choose add or update based on existing record
       const exists = alreadyAdded(activeMeeting.meetingId);
       const saveResp = exists
-        ? await updateSpeakerSpeechByMeeting(activeMeeting.meetingId, payload)
+        ? await updateSpeakerSpeechByMeeting(activeMeeting.meetingId, userId, payload)
         : await addSpeakerSpeech(payload);
       console.log('Saved speech response:', saveResp);
       
       // refresh existing cache for meeting
       try {
         const speechResp = await getSpeakerSpeechByMeeting(activeMeeting.meetingId);
-        const speech = speechResp?.data || speechResp;
-        setExistingByMeeting(prev => ({ 
-          ...prev, 
-          [activeMeeting.meetingId]: speech ? [speech] : [] 
+        const list = (() => {
+          if (Array.isArray(speechResp)) return speechResp;
+          if (Array.isArray(speechResp?.data)) return speechResp.data;
+          if (Array.isArray(speechResp?.data?.data)) return speechResp.data.data;
+          if (Array.isArray(speechResp?.data?.content)) return speechResp.data.content;
+          if (Array.isArray(speechResp?.content)) return speechResp.content;
+          return [];
+        })();
+        setExistingByMeeting(prev => ({
+          ...prev,
+          [activeMeeting.meetingId]: list
         }));
 
         // Success popup with latest saved data
-        if (speech) {
+        const mySpeech = (list || []).find(i => (i?.userId || i?.user?.userId || i?.user?.id) === userId);
+        if (mySpeech) {
           const html = `
             <div style="text-align:left">
-              <div><strong>Title:</strong> ${speech.title || ''}</div>
-              <div><strong>Pathways Track:</strong> ${speech.pathwaysTrack || ''}</div>
-              <div><strong>Level:</strong> ${speech.level ?? ''}</div>
-              <div><strong>Project #:</strong> ${speech.projectNo ?? ''}</div>
-              <div><strong>Time:</strong> ${speech.minSpeechTime ?? ''} - ${speech.maxSpeechTime ?? ''} min</div>
-              ${speech.objective ? `<div><strong>Objective:</strong> ${speech.objective}</div>` : ''}
+              <div><strong>Title:</strong> ${mySpeech.title || ''}</div>
+              <div><strong>Pathways Track:</strong> ${mySpeech.pathwaysTrack || ''}</div>
+              <div><strong>Level:</strong> ${mySpeech.level ?? ''}</div>
+              <div><strong>Project #:</strong> ${mySpeech.projectNo ?? ''}</div>
+              <div><strong>Time:</strong> ${mySpeech.minSpeechTime ?? ''} - ${mySpeech.maxSpeechTime ?? ''} min</div>
+              ${mySpeech.objective ? `<div><strong>Objective:</strong> ${mySpeech.objective}</div>` : ''}
             </div>
           `;
           await Swal.fire({

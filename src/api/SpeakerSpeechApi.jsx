@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:8888/agenda';
+const BASE_URL = '/api/agenda';
 
 // DTO shape assumption based on backend: {
 //   pathwaysTrack: string,
@@ -38,14 +38,15 @@ export const getSpeakerSpeechByMeeting = async (meetingId) => {
   }
 };
 
-export const updateSpeakerSpeechByMeeting = async (meetingId, dto) => {
-  const response = await axios.put(`${BASE_URL}/updateSpeakerSpeechByMeeting/${meetingId}`, dto, {
+export const updateSpeakerSpeechByMeeting = async (meetingId, userId, dto) => {
+  const response = await axios.put(`${BASE_URL}/updateSpeakerSpeechByMeeting/${userId}/${meetingId}`, dto, {
     headers: { 'Content-Type': 'application/json' }
   });
   return response.data;
 };
 
-export const deleteSpeakerSpeechByMeeting = async (meetingId) => {
-  const response = await axios.delete(`${BASE_URL}/deleteSpeakerSpeechByMeeting/${meetingId}`);
+export const deleteSpeakerSpeechByMeeting = async (userId, meetingId) => {
+  const response = await axios.delete(`${BASE_URL}/deleteSpeakerSpeechByMeeting/${userId}/${meetingId}`);
   return response.data;
 };
+

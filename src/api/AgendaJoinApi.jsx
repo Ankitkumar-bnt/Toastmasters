@@ -378,3 +378,17 @@ export const deleteSpeakerSpeechByUserAndMeeting = async (userId, meetingId) => 
     throw error;
   }
 };
+
+/**
+ * ===============================
+ * Copy Agenda APIs
+ * ===============================
+ */
+export const copyAgendaByMeeting = async (fromMeetingId, toMeetingId) => {
+  try {
+    return await axios.post(`${API_BASE_URL}/copyAgendaByMeeting/${fromMeetingId}/${toMeetingId}`);
+  } catch (error) {
+    console.error('Copy Agenda By Meeting API error:', error?.response || error);
+    throw error;
+  }
+};

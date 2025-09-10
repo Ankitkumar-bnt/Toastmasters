@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8888/meetings';
+const API_BASE_URL = '/api/meetings';
 
 export const addMeeting = async (meetingData) => {
   return axios.post(`${API_BASE_URL}/addMeeting`, meetingData);
