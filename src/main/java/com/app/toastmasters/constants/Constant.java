@@ -116,4 +116,7 @@ public class Constant {
     public static final String FOUND_ALL_USER_WINNERS = "Fetched all winners for the user successfully";
     public static final String MEETING_WINNER_UPDATED = "Meeting winner updated successfully";
     public static final String MEETING_WINNER_DELETED = "Meeting winner deleted successfully";
+
+    public static final String FOUND_ALL_ASSIGNED_EVALUATORS = "Found all assigned evaluators";
+
 }
