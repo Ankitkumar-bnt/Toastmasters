@@ -7,6 +7,8 @@ import { getAllMemberAvailability } from '../../api/AvailableMembersApi';
 import { getAllMembers } from '../../api/UserApi';
 import { getMemberPreferredRoles, addMemberPreferredRole } from '../../api/PreferredRoleApi';
 import { getMemberAssignedRole, addMemberAssignedRole } from '../../api/AssignedRoleApi';
+import { getAllMemberAssignedRolesByMeeting } from '../../api/AssignedRoleApi';
+import { assignEvaluators as saveEvaluatorAssignments, getAllAssignedEvaluatorsByMeeting } from '../../api/AssignEvaluatorApi';
 import { getAllRoles, addRole, updateRole, deleteRole } from '../../api/RoleApi';
 import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
 import { getLast3MeetingRoles } from '../../api/MeetingRoleApi'; // Fixed import
@@ -45,6 +47,257 @@ const AssignRole = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [allMeetings, setAllMeetings] = useState([]);
   const [filteredMeetings, setFilteredMeetings] = useState([]);
+
+  // Assign Evaluator states
+  const [showAssignEvaluatorModal, setShowAssignEvaluatorModal] = useState(false);
+  const [speakerList, setSpeakerList] = useState([]); // [{ userId, memberName }]
+  const [evaluatorList, setEvaluatorList] = useState([]); // [{ userId, memberName }]
+  const [selectedSpeakerId, setSelectedSpeakerId] = useState('');
+  const [selectedEvaluatorId, setSelectedEvaluatorId] = useState('');
+  const [pairs, setPairs] = useState([]); // [{ id?, speakerId, speakerName, evaluatorId, evaluatorName, meetingId }]
+  const [loadingEvaluatorData, setLoadingEvaluatorData] = useState(false);
+  const [initialPairsSnapshot, setInitialPairsSnapshot] = useState(''); // JSON snapshot to detect unsaved changes
+
+  const openAssignEvaluatorModal = async () => {
+    if (!selectedMeetingId) return;
+    setShowAssignEvaluatorModal(true);
+    setLoadingEvaluatorData(true);
+    try {
+      // Ensure we have members for name lookup
+      if (!allMembers || allMembers.length === 0) {
+        try {
+          const resp = await getAllMembers();
+          setAllMembers(resp.data?.data || []);
+        } catch (e) {
+          console.warn('Could not refresh allMembers:', e?.message);
+        }
+      }
+
+      // Helper to resolve a display name as `ID - Name`
+      const getDisplayNameById = (uid) => {
+        const mem = (allMembers || []).find(m => String(m.userId) === String(uid));
+        const name = mem?.userName || [mem?.firstName, mem?.lastName].filter(Boolean).join(' ') || `Member #${uid}`;
+        return `${uid} - ${name}`;
+      };
+
+      // 1) Fetch all assigned roles for the selected meeting
+      const assigned = await getAllMemberAssignedRolesByMeeting(selectedMeetingId);
+      const assignedList = assigned?.data || assigned?.data?.data || [];
+
+      // Build unique speakers and evaluators lists from roles
+      const speakersMap = new Map();
+      const evaluatorsMap = new Map();
+      const isSpeakerRole = (name) => typeof name === 'string' && name.toLowerCase().startsWith('speaker');
+      const isEvaluatorRole = (name) => typeof name === 'string' && name.toLowerCase().startsWith('evaluator');
+
+      assignedList.forEach((item) => {
+        const roleName = item.roleName || item.name || '';
+        const userId = item.userId || item.user?.userId || item.memberId;
+        if (!userId) return;
+        if (isSpeakerRole(roleName)) {
+          if (!speakersMap.has(String(userId))) {
+            speakersMap.set(String(userId), { userId, memberName: getDisplayNameById(userId) });
+          }
+        }
+        if (isEvaluatorRole(roleName)) {
+          if (!evaluatorsMap.has(String(userId))) {
+            evaluatorsMap.set(String(userId), { userId, memberName: getDisplayNameById(userId) });
+          }
+        }
+      });
+
+      const speakers = Array.from(speakersMap.values());
+      const evaluators = Array.from(evaluatorsMap.values());
+      setSpeakerList(speakers);
+      setEvaluatorList(evaluators);
+
+      // 2) Load existing evaluator assignments for the meeting
+      const existingRes = await getAllAssignedEvaluatorsByMeeting(selectedMeetingId);
+      const existing = existingRes?.data?.data || [];
+      const pairsWithNames = existing.map((a) => ({
+        id: a.id,
+        meetingId: a.meetingId,
+        speakerId: a.speakerId,
+        evaluatorId: a.evaluatorId,
+        speakerName: getDisplayNameById(a.speakerId),
+        evaluatorName: getDisplayNameById(a.evaluatorId),
+      }));
+      setPairs(pairsWithNames);
+      // Save initial snapshot for dirty-check on close
+      const snapshot = JSON.stringify(pairsWithNames.map(p => ({ id: p.id || null, speakerId: p.speakerId, evaluatorId: p.evaluatorId })));
+      setInitialPairsSnapshot(snapshot);
+    } catch (e) {
+      console.error('Error loading evaluator assignment data:', e);
+      setError('Failed to load evaluator assignment data');
+      setTimeout(() => setError(''), 3000);
+    } finally {
+      setLoadingEvaluatorData(false);
+    }
+  };
+
+  const addPair = async () => {
+    console.log('addPair called with:', { selectedSpeakerId, selectedEvaluatorId });
+    console.log('Speaker list:', speakerList);
+    console.log('Evaluator list:', evaluatorList);
+    
+    if (!selectedSpeakerId || !selectedEvaluatorId) {
+      await Swal.fire({
+        icon: 'info',
+        title: 'Select both',
+        text: 'Please select an evaluator and a speaker before assigning.'
+      });
+      return;
+    }
+    
+    const speaker = speakerList.find(s => String(s.userId) === String(selectedSpeakerId));
+    const evaluator = evaluatorList.find(e => String(e.userId) === String(selectedEvaluatorId));
+    
+    console.log('Found speaker:', speaker);
+    console.log('Found evaluator:', evaluator);
+    
+    if (!speaker || !evaluator) {
+      await Swal.fire({ icon: 'error', title: 'Not found', text: 'Speaker or evaluator not found in lists.' });
+      return;
+    }
+
+    // Prevent self-assignment: same user cannot evaluate themselves
+    if (String(speaker.userId) === String(evaluator.userId)) {
+      console.log('Self-assignment prevented');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Not allowed',
+        text: 'A member cannot be assigned as their own evaluator.'
+      });
+      return;
+    }
+
+    const exists = pairs.some(p => String(p.speakerId) === String(speaker.userId) && String(p.evaluatorId) === String(evaluator.userId));
+    if (exists) {
+      await Swal.fire({ icon: 'info', title: 'Already added', text: 'This evaluator-speaker pair is already in the list.' });
+      return;
+    }
+
+    const confirmAdd = await Swal.fire({
+      title: 'Add assignment?',
+      html: `<div style="text-align:left">Evaluator: <b>${evaluator.memberName}</b><br/>Speaker: <b>${speaker.memberName}</b></div>`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Add',
+      cancelButtonText: 'Cancel'
+    });
+    if (!confirmAdd.isConfirmed) return;
+
+    const newPair = {
+      meetingId: selectedMeetingId,
+      speakerId: speaker.userId,
+      evaluatorId: evaluator.userId,
+      speakerName: speaker.memberName,
+      evaluatorName: evaluator.memberName,
+    };
+    
+    console.log('Adding new pair:', newPair);
+
+    setPairs(prev => [...prev, newPair]);
+    setSelectedSpeakerId('');
+    setSelectedEvaluatorId('');
+  };
+
+  const removePair = async (index) => {
+    const result = await Swal.fire({
+      title: 'Remove assignment?',
+      text: 'This will remove the selected evaluator-speaker pair.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, remove',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true
+    });
+    if (!result.isConfirmed) return;
+    setPairs(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const isPairsDirty = () => {
+    try {
+      const current = JSON.stringify(pairs.map(p => ({ id: p.id || null, speakerId: p.speakerId, evaluatorId: p.evaluatorId })));
+      return current !== initialPairsSnapshot;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCloseAssignEvaluatorModal = async () => {
+    if (isPairsDirty()) {
+      const res = await Swal.fire({
+        title: 'Discard changes?',
+        text: 'You have unsaved changes. Do you want to discard them?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Discard',
+        cancelButtonText: 'Keep editing',
+        reverseButtons: true
+      });
+      if (!res.isConfirmed) return;
+    }
+    setShowAssignEvaluatorModal(false);
+  };
+
+  const savePairs = async () => {
+    const confirm = await Swal.fire({
+      title: 'Save assignments?',
+      text: 'This will save all evaluator-speaker assignments for this meeting.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      cancelButtonText: 'Cancel'
+    });
+    if (!confirm.isConfirmed) return;
+
+    try {
+      const payload = pairs.map(p => ({
+        id: p.id || null,
+        speakerId: Number(p.speakerId),
+        evaluatorId: Number(p.evaluatorId),
+        meetingId: Number(selectedMeetingId)
+      }));
+      console.log('Saving evaluator assignments payload:', payload);
+      const resp = await saveEvaluatorAssignments(payload);
+      console.log('Backend response:', resp);
+      // If backend returns ResponseMessage, it will be under resp.data
+      const ok = resp?.data?.success !== false; // treat as success unless explicitly false
+      if (!ok) throw new Error(resp?.data?.message || 'Save failed');
+
+      // Refresh from backend to get authoritative list (with IDs)
+      const refreshed = await getAllAssignedEvaluatorsByMeeting(selectedMeetingId);
+      const list = refreshed?.data?.data || [];
+
+      // Ensure we still have allMembers for name resolution
+      const getDisplayNameById = (uid) => {
+        const mem = (allMembers || []).find(m => String(m.userId) === String(uid));
+        const name = mem?.userName || [mem?.firstName, mem?.lastName].filter(Boolean).join(' ') || `Member #${uid}`;
+        return `${uid} - ${name}`;
+      };
+      setPairs(list.map(a => ({
+        id: a.id,
+        meetingId: a.meetingId,
+        speakerId: a.speakerId,
+        evaluatorId: a.evaluatorId,
+        speakerName: getDisplayNameById(a.speakerId),
+        evaluatorName: getDisplayNameById(a.evaluatorId)
+      })));
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Saved',
+        text: 'Evaluator assignments saved successfully.'
+      });
+      setShowAssignEvaluatorModal(false);
+    } catch (e) {
+      console.error('Error saving evaluator assignments:', e);
+      Swal.fire({ icon: 'error', title: 'Error', text: e.response?.data?.message || e.message || 'Failed to save assignments' });
+    }
+  };
 
   // Filter meetings based on search term
   useEffect(() => {
@@ -785,6 +1038,11 @@ const AssignRole = () => {
           <Card.Header className="d-flex align-items-center">
             <Users size={18} className="me-2" />
             <h5 className="mb-0">Available Members & Role Assignment</h5>
+            <div className="ms-auto">
+              <Button variant="danger" size="sm" onClick={openAssignEvaluatorModal}>
+                Assign Evaluator
+              </Button>
+            </div>
           </Card.Header>
           <Card.Body>
             {loading ? (
@@ -1051,6 +1309,118 @@ const AssignRole = () => {
           </Button>
           <Button variant="primary" onClick={saveRoleAssignments}>
             Save Changes
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Assign Evaluator Modal */}
+      <Modal show={showAssignEvaluatorModal} onHide={handleCloseAssignEvaluatorModal}>
+        <Modal.Header closeButton>
+          <Modal.Title>Assign Evaluator</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {loadingEvaluatorData ? (
+            <div className="text-center my-4">
+              <Spinner animation="border" />
+            </div>
+          ) : (
+            <>
+              <div className="mb-3">
+                <Row className="align-items-end g-2">
+                  <Col md={5}>
+                    <Form.Label>Evaluators</Form.Label>
+                    <Form.Select
+                      value={selectedEvaluatorId}
+                      onChange={(e) => setSelectedEvaluatorId(e.target.value)}
+                    >
+                      <option value="">Select Evaluator</option>
+                      {evaluatorList.map((e) => {
+                        const used = pairs.some(p => String(p.evaluatorId) === String(e.userId));
+                        const isSelfWithCurrentSpeaker = String(e.userId) === String(selectedSpeakerId || '');
+                        return (
+                          <option key={e.userId} value={e.userId} disabled={isSelfWithCurrentSpeaker}>
+                           ID: {e.memberName}{used ? '   ✅' : ''}
+                          </option>
+                        );
+                      })}
+                    </Form.Select>
+                  </Col>
+                  <Col md={2} className="d-flex justify-content-center">
+                    <Button variant="outline-primary" className="w-100 mt-4" onClick={addPair}>
+                      Assign
+                    </Button>
+                  </Col>
+                  <Col md={5}>
+                    <Form.Label>Speakers</Form.Label>
+                    <Form.Select
+                      value={selectedSpeakerId}
+                      onChange={(e) => setSelectedSpeakerId(e.target.value)}
+                    >
+                      <option value="">Select Speaker</option>
+                      {speakerList.map((s) => {
+                        const used = pairs.some(p => String(p.speakerId) === String(s.userId));
+                        const isSelfWithCurrentEvaluator = String(s.userId) === String(selectedEvaluatorId || '');
+                        return (
+                          <option key={s.userId} value={s.userId} disabled={isSelfWithCurrentEvaluator}>
+                           ID: {s.memberName}{used ? '   ✅' : ''}
+                          </option>
+                        );
+                      })}
+                    </Form.Select>
+                  </Col>
+                </Row>
+              </div>
+
+              {/* Current pairs (TODO-like list) */}
+              <div className="mt-3">
+                <h6 className="mb-2">Assignments</h6>
+                {pairs.length === 0 ? (
+                  <Alert variant="info" className="py-2 mb-0">No assignments added yet.</Alert>
+                ) : (
+                  <Table responsive size="sm" className="align-middle">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Evaluator</th>
+                        <th></th>
+                        <th>Speaker</th>
+                        <th className="text-end">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pairs.map((p, idx) => (
+                        <tr key={`${p.speakerId}-${p.evaluatorId}-${idx}`}>
+                          <td>{idx + 1}</td>
+                          <td>
+                            <Badge bg="secondary">ID: {p.evaluatorName}</Badge>
+                          </td>
+                          <td className="text-muted">→</td>
+                          <td>
+                            <Badge bg="light" text="dark">ID: {p.speakerName}</Badge>
+                          </td>
+                          <td className="text-end">
+                            <Button variant="outline-danger" size="sm" onClick={() => removePair(idx)}>
+                              <Trash2 size={14} />
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </div>
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <div className="me-auto small text-muted">
+            Meeting ID: {selectedMeetingId || '-'}
+          </div>
+          <Button variant="secondary" onClick={handleCloseAssignEvaluatorModal}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={savePairs} disabled={pairs.length === 0}>
+            Save
           </Button>
         </Modal.Footer>
       </Modal>

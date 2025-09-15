@@ -4,12 +4,22 @@ import { getMemberPreferredRoles, addMemberPreferredRole, deleteMemberPreferredR
 import { getMemberAssignedRole, getAllMemberAssignedRolesByMeeting } from '../../api/AssignedRoleApi';
 import { getMeetingById, getAllMeetings } from '../../api/MeetingApi';
 import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
+import { getAllMemberAvailabilityByMeetingId, getAvailabilityById } from '../../api/AvailableMembersApi';
+import { getAllMembers } from '../../api/UserApi';
+import { getAllAssignedEvaluatorsBySpeakerAndMeeting, getAllAssignedEvaluatorsByEvaluatorAndMeeting, getAllAssignedEvaluatorsByMeeting } from '../../api/AssignEvaluatorApi';
 
 const PreferredRolesPage = ({ onMeetingClick }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [meetings, setMeetings] = useState([]);
   const [updatingPreferences, setUpdatingPreferences] = useState({});
+
+  // Helper function to safely extract role names
+  const getRoleName = (role) => {
+    if (!role) return '';
+    if (typeof role === 'string') return role;
+    return role.roleName || role.role_name || role.name || JSON.stringify(role);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,7 +60,16 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
           return;
         }
 
-        // For each meeting, get preferred roles, assigned roles, and available roles with counts
+        // Preload all members for name mapping
+        let members = [];
+        try {
+          const membersRes = await getAllMembers();
+          members = membersRes.data?.data || [];
+        } catch (e) {
+          console.warn('Failed to load members for name mapping');
+        }
+
+        // For each meeting, get preferred roles, assigned roles, availability and evaluator assignments (if speaker)
         const meetingsWithRoles = [];
         
         // Process meetings sequentially to avoid too many parallel requests
@@ -137,12 +156,188 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
               console.error('Error fetching available roles:', err);
             }
 
+            // Determine availability status for current user for this meeting
+            let availabilityStatus = -1; // -1 not marked
+            try {
+              const currentUser = JSON.parse(localStorage.getItem('tm_current_user') || '{}');
+              const userId = currentUser.userId || currentUser.id;
+              
+              // First try to get user's availability for this meeting
+              const availRes = await getAvailabilityById(userId);
+              const userAvailabilities = availRes.data?.data || availRes.data || [];
+              
+              // Find the record for this meeting
+              const record = userAvailabilities.find(a => 
+                a.meetingId === meetingId || 
+                a.meeting?.meetingId === meetingId
+              );
+              
+              // Get status from record, with fallbacks
+              let status = record?.status ?? record?.availability ?? record?.availableStatus ?? -1;
+              
+              // Normalize status to number
+              if (typeof status === 'string') {
+                const s = status.toLowerCase().trim();
+                if (['1', 'available', 'yes', 'true'].includes(s)) status = 1;
+                else if (['0', 'not available', 'no', 'false', 'notavailable'].includes(s)) status = 0;
+                else if (['2', 'tentative', 'maybe'].includes(s)) status = 2;
+                else status = -1; // Default to -1 for any unknown string
+              }
+              
+              availabilityStatus = Number(status);
+              console.log('Availability for meeting', meetingId, 'status:', availabilityStatus, 'record:', record);
+              
+            } catch (e) {
+              console.error('Error fetching availability:', e);
+              // Fallback to old method if new one fails
+              try {
+                const availRes = await getAllMemberAvailabilityByMeetingId(meetingId);
+                const allForMeeting = availRes.data?.data || availRes.data || [];
+                const currentUser = JSON.parse(localStorage.getItem('tm_current_user') || '{}');
+                const userId = currentUser.userId || currentUser.id;
+                const record = allForMeeting.find(a => 
+                  String(a.userId || a.memberId || a.user?.userId) === String(userId)
+                );
+                if (record) {
+                  let status = record.status ?? record.availability ?? record.availableStatus ?? -1;
+                  availabilityStatus = Number(status);
+                  console.log('Fallback availability for meeting', meetingId, 'status:', availabilityStatus);
+                }
+              } catch (fallbackError) {
+                console.error('Fallback availability fetch failed:', fallbackError);
+              }
+            }
+
+            // If user is a speaker for this meeting, fetch assigned evaluators
+            let assignedEvaluators = [];
+            // If user is an evaluator for this meeting, fetch assigned speakers
+            let assignedSpeakers = [];
+            try {
+              const roleNames = assignedRoles.map(r => getRoleName(r).toLowerCase());
+              const isSpeaker = roleNames.some(n => n.startsWith('speaker'));
+              const isEvaluator = roleNames.some(n => n.startsWith('evaluator'));
+              if (isSpeaker) {
+                const currentUser = JSON.parse(localStorage.getItem('tm_current_user') || '{}');
+                const userId = currentUser.userId || currentUser.id;
+                console.log('Fetching AssignedEvaluatorsBySpeakerAndMeeting for', { speakerId: userId, meetingId });
+                const evalRes = await getAllAssignedEvaluatorsBySpeakerAndMeeting(Number(userId), Number(meetingId));
+                console.log('Speaker-level evaluator response:', evalRes);
+                const evalData = evalRes?.data?.data ?? evalRes?.data ?? [];
+                // Map to display list with ID - Name
+                if (Array.isArray(evalData) && evalData.length > 0) {
+                  assignedEvaluators = evalData.map(item => {
+                    const evaluatorId = item.evaluatorId ?? item.userId ?? item.id;
+                    const member = members.find(m => String(m.userId) === String(evaluatorId));
+                    const name = member?.userName || [member?.firstName, member?.lastName].filter(Boolean).join(' ');
+                    return name ? `${evaluatorId} - ${name}` : `${evaluatorId}`;
+                  });
+                }
+                // Fallback: if API returns empty, fetch all for meeting and filter by this speaker
+                if (assignedEvaluators.length === 0) {
+                  try {
+                    console.log('Falling back to meeting-level fetch for evaluators', { meetingId });
+                    const allRes = await getAllAssignedEvaluatorsByMeeting(Number(meetingId));
+                    const allData = allRes?.data?.data ?? allRes?.data ?? [];
+                    assignedEvaluators = allData
+                      .filter(a => String(a.speakerId) === String(userId))
+                      .map(item => {
+                        const evaluatorId = item.evaluatorId ?? item.userId ?? item.id;
+                        const member = members.find(m => String(m.userId) === String(evaluatorId));
+                        const name = member?.userName || [member?.firstName, member?.lastName].filter(Boolean).join(' ');
+                        return name ? `${evaluatorId} - ${name}` : `${evaluatorId}`;
+                      });
+                  } catch (e) {
+                    // ignore
+                  }
+                }
+                console.log('Assigned evaluators for meeting', meetingId, assignedEvaluators);
+              }
+
+              if (isEvaluator) {
+                try {
+                  const currentUser = JSON.parse(localStorage.getItem('tm_current_user') || '{}');
+                  const userId = currentUser.userId || currentUser.id;
+                  console.log('Fetching AssignedEvaluatorsByEvaluatorAndMeeting for', { evaluatorId: userId, meetingId });
+                  const spRes = await getAllAssignedEvaluatorsByEvaluatorAndMeeting(Number(userId), Number(meetingId));
+                  console.log('Evaluator-level speaker response:', spRes);
+                  const spData = spRes?.data?.data ?? spRes?.data ?? [];
+                  assignedSpeakers = Array.isArray(spData) ? spData.map(item => {
+                    const speakerId = item.speakerId ?? item.userId ?? item.id;
+                    const member = members.find(m => String(m.userId) === String(speakerId));
+                    const name = member?.userName || [member?.firstName, member?.lastName].filter(Boolean).join(' ');
+                    return name ? `${speakerId} - ${name}` : `${speakerId}`;
+                  }) : [];
+                  // Fallback: filter meeting-level data
+                  if (assignedSpeakers.length === 0) {
+                    try {
+                      console.log('Falling back to meeting-level fetch for speakers', { meetingId });
+                      const allRes = await getAllAssignedEvaluatorsByMeeting(Number(meetingId));
+                      const allData = allRes?.data?.data ?? allRes?.data ?? [];
+                      assignedSpeakers = allData
+                        .filter(a => String(a.evaluatorId) === String(userId))
+                        .map(item => {
+                          const speakerId = item.speakerId ?? item.userId ?? item.id;
+                          const member = members.find(m => String(m.userId) === String(speakerId));
+                          const name = member?.userName || [member?.firstName, member?.lastName].filter(Boolean).join(' ');
+                          return name ? `${speakerId} - ${name}` : `${speakerId}`;
+                        });
+                    } catch (e) {
+                      // ignore
+                    }
+                  }
+                  console.log('Assigned speakers for meeting', meetingId, assignedSpeakers);
+                } catch (e) {
+                  // ignore individual errors
+                }
+              }
+            } catch (e) {
+              // ignore if fails
+            }
+
+            // Absolute fallback using meeting-level assignments (independent of role strings)
+            try {
+              if (assignedEvaluators.length === 0 || assignedSpeakers.length === 0) {
+                const currentUser = JSON.parse(localStorage.getItem('tm_current_user') || '{}');
+                const userId = currentUser.userId || currentUser.id;
+                const allRes = await getAllAssignedEvaluatorsByMeeting(Number(meetingId));
+                const allData = allRes?.data?.data ?? allRes?.data ?? [];
+
+                if (assignedEvaluators.length === 0) {
+                  assignedEvaluators = allData
+                    .filter(a => String(a.speakerId) === String(userId))
+                    .map(item => {
+                      const evaluatorId = item.evaluatorId ?? item.userId ?? item.id;
+                      const member = members.find(m => String(m.userId) === String(evaluatorId));
+                      const name = member?.userName || [member?.firstName, member?.lastName].filter(Boolean).join(' ');
+                      return name ? `${evaluatorId} - ${name}` : `${evaluatorId}`;
+                    });
+                }
+
+                if (assignedSpeakers.length === 0) {
+                  assignedSpeakers = allData
+                    .filter(a => String(a.evaluatorId) === String(userId))
+                    .map(item => {
+                      const speakerId = item.speakerId ?? item.userId ?? item.id;
+                      const member = members.find(m => String(m.userId) === String(speakerId));
+                      const name = member?.userName || [member?.firstName, member?.lastName].filter(Boolean).join(' ');
+                      return name ? `${speakerId} - ${name}` : `${speakerId}`;
+                    });
+                }
+                console.log('Computed from meeting-level assignments', { meetingId, assignedEvaluators, assignedSpeakers });
+              }
+            } catch (e) {
+              // ignore
+            }
+
             meetingsWithRoles.push({
               ...meeting,
               meetingId, // Ensure meetingId is set
               preferredRoles,
               assignedRoles,
-              availableRoles
+              availableRoles,
+              availabilityStatus,
+              assignedEvaluators,
+              assignedSpeakers
             });
 
           } catch (err) {
@@ -206,12 +401,7 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
   // Debug: Log the final meetings data
   console.log('Final meetings data:', meetings);
 
-  // Helper function to safely extract role names
-  const getRoleName = (role) => {
-    if (!role) return '';
-    if (typeof role === 'string') return role;
-    return role.roleName || role.role_name || role.name || JSON.stringify(role);
-  };
+  // (moved getRoleName above to avoid temporal dead zone when used earlier)
 
   // Handle role preference selection
   const handleRolePreferenceToggle = async (meetingId, roleName) => {
@@ -307,21 +497,44 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
               date,
               preferredRoles,
               assignedRoles,
+              assignedEvaluators: meeting.assignedEvaluators,
+              assignedSpeakers: meeting.assignedSpeakers,
               rawMeeting: meeting // Log the raw meeting object for debugging
             });
+
+            // Determine card border color based on availability
+            const status = typeof meeting.availabilityStatus !== 'undefined' 
+              ? Number(meeting.availabilityStatus) 
+              : -1; // Default to -1 (blue) if not set
+              
+            const borderClass = status === 1
+              ? 'border-success' // Available - Green
+              : status === 0
+              ? 'border-danger'  // Not Available - Red
+              : status === 2
+              ? 'border-warning' // Tentative - Yellow
+              : 'border-primary'; // Not Set - Blue
+              
+            const statusColor = status === 1
+              ? '#198754' // green
+              : status === 0
+              ? '#dc3545' // red
+              : status === 2
+              ? '#ffc107' // yellow
+              : '#0d6efd'; // blue (default)
 
             return (
               <Col key={meetingId}>
                 <Card 
-                  className="h-100 shadow-sm hover-card"
-                  style={{ cursor: 'pointer' }}
+                  className={`h-100 shadow-sm hover-card border-2 ${borderClass}`}
+                  style={{ cursor: 'pointer', borderLeft: `6px solid ${statusColor}` }}
                   onClick={() => onMeetingClick(meeting)}
                 >
                   <Card.Header className="bg-light d-flex justify-content-between align-items-center">
                     <h5 className="mb-0">{theme}</h5>
                     <Badge bg="secondary" className="ms-2">ID: {meetingId}</Badge>
                   </Card.Header>
-                  <Card.Body>
+                  <Card.Body style={{ minHeight: '260px' }}>
                     <div className="mb-3">
                       <div className="text-muted small">Date</div>
                       <div>{formatDate(date)}</div>
@@ -398,7 +611,7 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
                       </div>
                     </div>
 
-                    <div>
+                    <div className="mb-2">
                       <div className="d-flex justify-content-between align-items-center mb-2">
                         <span className="fw-semibold">Your Assigned Roles</span>
                       </div>
@@ -414,6 +627,40 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
                         )}
                       </div>
                     </div>
+
+                    {/* Assigned Evaluators (only if the user is a speaker for this meeting) */}
+                    {Array.isArray(meeting.assignedEvaluators) && meeting.assignedEvaluators.length > 0 && (
+                      <div>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="fw-semibold">Assigned Evaluators</span>
+                          <Badge bg="light" text="dark">{meeting.assignedEvaluators.length}</Badge>
+                        </div>
+                        <div className="d-flex flex-wrap gap-1">
+                          {meeting.assignedEvaluators.map((label, idx) => (
+                            <Badge key={`eval-${idx}`} bg="secondary" className="me-1 mb-1">
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Assigned Speakers (only if the user is an evaluator for this meeting) */}
+                    {Array.isArray(meeting.assignedSpeakers) && meeting.assignedSpeakers.length > 0 && (
+                      <div className="mt-2">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="fw-semibold">Assigned Speakers</span>
+                          <Badge bg="light" text="dark">{meeting.assignedSpeakers.length}</Badge>
+                        </div>
+                        <div className="d-flex flex-wrap gap-1">
+                          {meeting.assignedSpeakers.map((label, idx) => (
+                            <Badge key={`spk-${idx}`} bg="info" className="me-1 mb-1">
+                              {label}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </Card.Body>
                 </Card>
               </Col>

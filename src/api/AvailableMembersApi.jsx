@@ -12,8 +12,20 @@ export const getAllMemberAvailability = async () => {
 	return axios.get(`${API_BASE_URL}/getAllMemberAvailability`);
 };
 
+/**
+ * Get all availability records for a specific user
+ * @param {number} userId - The ID of the user
+ * @returns {Promise} Axios response with the user's availability records
+ */
 export const getAvailabilityById = async (userId) => {
-  return axios.get(`${API_BASE_URL}/getAvailabilityById/${userId}`);
+  try {
+    const response = await axios.get(`${API_BASE_URL}/getAvailabilityById/${userId}`);
+    console.log('getAvailabilityById response:', response.data);
+    return response;
+  } catch (error) {
+    console.error('Error in getAvailabilityById:', error);
+    throw error;
+  }
 };
 
 export const getAllMemberAvailabilityByMeetingId = async (meetingId) => {
