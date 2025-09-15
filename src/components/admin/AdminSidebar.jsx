@@ -1,6 +1,6 @@
 import React from 'react';
 import { Nav } from 'react-bootstrap';
-import { Users, UserPlus, Calendar, FileText, Home, UserCheck } from 'lucide-react';
+import { Users, UserPlus, Calendar, FileText, Home, UserCheck, Trophy, Award } from 'lucide-react';
 
 const AdminSidebar = ({ activeTab, setActiveTab }) => {
   const menuItems = [
@@ -10,6 +10,8 @@ const AdminSidebar = ({ activeTab, setActiveTab }) => {
     { id: 'assign-role', icon: UserCheck, label: 'Assign Roles' },
     { id: 'meetings', icon: Calendar, label: 'Meetings' },
     { id: 'agenda', icon: FileText, label: 'Agenda' },
+    { id: 'meeting-winner', icon: Trophy, label: 'Meeting Winner' },
+    { id: 'gem-of-month', icon: Award, label: 'Gem of Month' },
   ];
 
   return (

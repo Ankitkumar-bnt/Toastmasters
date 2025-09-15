@@ -16,6 +16,8 @@ import DashboardStats from './components/admin/dashboard/DashboardStats';
 import AssignRole from './components/assign-role/AssignRole';
 import AgendaView from './components/agenda/AgendaView';
 import UpdateAgenda from './components/agenda/updateAgenda';
+import GemOfMonthModal from './components/admin/GemOfMonthModal';
+import MeetingWinner from './components/admin/MeetingWinner';
 import { Users, UserPlus, Calendar, FileText } from 'lucide-react';
 import './App.css';
 
@@ -33,6 +35,7 @@ function App({ onLogout }) {
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [editingAgendaMeetingId, setEditingAgendaMeetingId] = useState(null);
   const [selectedAgendaMeetingId, setSelectedAgendaMeetingId] = useState(null);
+  const [showGemOfMonthModal, setShowGemOfMonthModal] = useState(false);
 
   // Update activeTab based on current route (keep dashboard default on "/")
   useEffect(() => {
@@ -40,6 +43,14 @@ function App({ onLogout }) {
       setActiveTab('dashboard');
     }
   }, [location.pathname]);
+
+  // Handle gem of month modal
+  useEffect(() => {
+    if (activeTab === 'gem-of-month') {
+      setShowGemOfMonthModal(true);
+      setActiveTab('dashboard'); // Reset to dashboard after opening modal
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     loadUsers();
@@ -434,6 +445,8 @@ function App({ onLogout }) {
     </div>
   );
 
+  const renderMeetingWinner = () => <MeetingWinner />;
+
   const renderContent = () => {
     return (
       <>
@@ -453,6 +466,8 @@ function App({ onLogout }) {
               return renderAssignRole();
             case 'agenda':
               return renderAgenda();
+            case 'meeting-winner':
+              return renderMeetingWinner();
             default:
               return (
                 <Card className="shadow-sm">
@@ -479,6 +494,11 @@ function App({ onLogout }) {
           onSubmit={handleSubmitMeeting}
           editingMeeting={editingMeeting}
           title={editingMeeting ? 'Edit Meeting' : 'Add New Meeting'}
+        />
+
+        <GemOfMonthModal
+          show={showGemOfMonthModal}
+          onHide={() => setShowGemOfMonthModal(false)}
         />
       </>
     );

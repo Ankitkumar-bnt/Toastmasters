@@ -392,3 +392,16 @@ export const copyAgendaByMeeting = async (fromMeetingId, toMeetingId) => {
     throw error;
   }
 };
+
+/**
+ * Publish/Unpublish Agenda for a Meeting
+ * Pass status as 'published' to set true; anything else will set false.
+ */
+export const isAgendaPublished = async (meetingId, status) => {
+  try {
+    return await axios.post(`${API_BASE_URL}/isAgendaPublished/${meetingId}/${status}`);
+  } catch (error) {
+    console.error('Is Agenda Published API error:', error?.response || error);
+    throw error;
+  }
+};

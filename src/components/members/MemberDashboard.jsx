@@ -3,11 +3,15 @@ import { Container, Nav, Navbar, Card, Modal, Button, Form } from 'react-bootstr
 import { Calendar, Star, User, LogOut, Bell, Save, Edit } from 'lucide-react';
 import { logout } from '../../api/AuthApi';
 import ViewMeetings from './ViewMeetings';
+import AgendaView from '../agenda/AgendaView';
 import MeetingDetailsView from './MeetingDetailsView';
 import PreferredRolesPage from './PreferredRolesPage';
 import AssignedSpeech from './AssignedSpeech';
 import AssignedWodPod from './AssignedWodPod';
 import { getAllMeetings } from '../../api/MeetingApi';
+import MemberGemOfMonth from './MemberGemOfMonth';
+import MemberMeetingWinner from './MemberMeetingWinner';
+import MemberSidebar from './MemberSidebar';
 
 function MemberDashboard({ onLogout }) {
   const [activeTab, setActiveTab] = useState('view-meeting');
@@ -15,6 +19,7 @@ function MemberDashboard({ onLogout }) {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [formData, setFormData] = useState({});
+  const [viewAgendaMeetingId, setViewAgendaMeetingId] = useState(null);
   
   // Get current user from localStorage
   const currentUserRaw = localStorage.getItem('tm_current_user');
@@ -81,7 +86,18 @@ function MemberDashboard({ onLogout }) {
     switch (activeTab) {
       case 'view-meeting':
         return (
-          selectedMeeting ? (
+          viewAgendaMeetingId ? (
+            <div style={{ width: '75%', margin: '0 auto' }}>
+              <div className="d-flex justify-content-end align-items-center mb-2">
+                <Button variant="outline-secondary" size="sm" onClick={() => setViewAgendaMeetingId(null)}>
+                  Back
+                </Button>
+              </div>
+              <Card className="shadow-sm p-3">
+                <AgendaView preselectedMeetingId={viewAgendaMeetingId} isMemberView={true} />
+              </Card>
+            </div>
+          ) : selectedMeeting ? (
             <MeetingDetailsView
               meeting={selectedMeeting}
               onBack={() => setSelectedMeeting(null)}
@@ -91,6 +107,7 @@ function MemberDashboard({ onLogout }) {
               onOpenDetails={(m) => setSelectedMeeting(m)} 
               onOpenAssignedWodPod={() => setActiveTab('assigned-wodpod')}
               onOpenAssignedSpeech={() => setActiveTab('assigned-speech')}
+              onOpenAgenda={(mid) => setViewAgendaMeetingId(mid)}
             />
           )
         );
@@ -106,6 +123,14 @@ function MemberDashboard({ onLogout }) {
       case 'assigned-speech':
         return (
           <AssignedSpeech onBack={() => setActiveTab('view-meeting')} />
+        );
+      case 'gem-month':
+        return (
+          <MemberGemOfMonth />
+        );
+      case 'meeting-winner':
+        return (
+          <MemberMeetingWinner />
         );
       case 'profile':
         return null; // We'll handle profile in a modal now
@@ -155,9 +180,24 @@ function MemberDashboard({ onLogout }) {
         </Container>
       </Navbar>
 
-      <Container fluid className="p-4">
-        {renderContent()}
-      </Container>
+      {/* Fixed sidebar like admin */}
+      <MemberSidebar activeTab={activeTab} setActiveTab={(id) => {
+        if (id === 'view-meeting') setSelectedMeeting(null);
+        setActiveTab(id);
+      }} />
+
+      {/* Shift content to the right of the fixed 250px sidebar and below navbar */}
+      <div
+        style={{
+          marginLeft: '250px',
+          width: 'calc(100% - 250px)',
+          marginTop: '56px',
+        }}
+      >
+        <Container fluid className="p-3">
+          {renderContent()}
+        </Container>
+      </div>
 
       {/* Profile Modal */}
       <Modal show={showProfileModal} onHide={() => setShowProfileModal(false)} centered size="lg">

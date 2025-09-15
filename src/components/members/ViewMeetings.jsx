@@ -3,7 +3,7 @@ import { Card, Spinner, Table, Badge, Dropdown, Pagination, Button } from 'react
 import { Calendar, Clock, Filter } from 'lucide-react';
 import { getAllMeetings } from '../../api/MeetingApi';
 
-const ViewMeetings = ({ onOpenDetails, onOpenAssignedWodPod, onOpenAssignedSpeech }) => {
+const ViewMeetings = ({ onOpenDetails, onOpenAssignedWodPod, onOpenAssignedSpeech, onOpenAgenda }) => {
   const [meetings, setMeetings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -43,6 +43,22 @@ const ViewMeetings = ({ onOpenDetails, onOpenAssignedWodPod, onOpenAssignedSpeec
 
     fetchMeetings();
   }, []);
+
+  // Determine if a meeting is published (supports multiple backend representations)
+  const isMeetingPublished = (meeting) => {
+    const raw = meeting?.isPublish ?? meeting?.isPublished ?? meeting?.published;
+    if (typeof raw === 'boolean') return raw;
+    if (typeof raw === 'number') return raw === 1;
+    if (typeof raw === 'string') {
+      const s = raw.trim().toLowerCase();
+      if (s.startsWith('0x')) {
+        const num = Number.parseInt(s, 16);
+        return num === 1;
+      }
+      return s === 'true' || s === '1' || s === 'yes' || s === 'published';
+    }
+    return false;
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -175,6 +191,7 @@ const ViewMeetings = ({ onOpenDetails, onOpenAssignedWodPod, onOpenAssignedSpeec
                 </th>
                 <th className="px-3 py-3">Theme</th>
                 <th className="px-3 py-3">Location</th>
+                <th className="px-3 py-3">Agenda</th>
               </tr>
             </thead>
             <tbody>
@@ -184,7 +201,7 @@ const ViewMeetings = ({ onOpenDetails, onOpenAssignedWodPod, onOpenAssignedSpeec
                     key={meeting.meetingId}
                     onClick={() => onOpenDetails && onOpenDetails(meeting)}
                     style={{ cursor: onOpenDetails ? 'pointer' : 'default' }}
-                    title={onOpenDetails ? 'Click to view details' : undefined}
+                    title={onOpenDetails ? 'Click to view meeting details' : undefined}
                   >
                     <td className="px-3 py-3 fw-semibold">
                       {meeting.meetingId || 'N/A'}
@@ -202,11 +219,30 @@ const ViewMeetings = ({ onOpenDetails, onOpenAssignedWodPod, onOpenAssignedSpeec
                     </td>
                     <td className="px-3 py-3">{meeting.meetingTheme || 'N/A'}</td>
                     <td className="px-3 py-3">{meeting.meetingLocation || 'N\u00A0A'}</td>
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                      {(() => {
+                        const published = isMeetingPublished(meeting);
+                        return (
+                          <Button
+                            variant={published ? 'primary' : 'outline-secondary'}
+                            size="sm"
+                            disabled={!published}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onOpenAgenda) onOpenAgenda(meeting.meetingId);
+                            }}
+                            title={published ? 'View Agenda' : 'Agenda not published yet'}
+                          >
+                            View Agenda
+                          </Button>
+                        );
+                      })()}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="6" className="text-center py-4 text-muted">
+                  <td colSpan="7" className="text-center py-4 text-muted">
                     No meetings found
                   </td>
                 </tr>

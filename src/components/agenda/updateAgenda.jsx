@@ -262,15 +262,7 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
       if (speakerSpeeches && speakerSpeeches.length > 0) {
         console.log('Setting speaker speeches:', speakerSpeeches);
         setSpeakerSpeeches(speakerSpeeches);
-        
-        // Find where to insert the speech section (after section ID 1)
-        const insertIndex = editableAgenda.findIndex(item => 
-          normalizeSectionId(item.sectionId || item.agendaSectionId || item.agendaSection?.sectionId || 1) > 1
-        );
-        const actualInsertIndex = insertIndex === -1 ? editableAgenda.length : insertIndex;
-        console.log('Insert index for speeches:', actualInsertIndex);
-        
-        // Create speech section header (No section -> sectionId 1)
+        // Create speech section header (No section context -> sectionId 1)
         const speechSectionHeader = {
           id: `speech-section-${Date.now()}`,
           isSection: true,
@@ -296,7 +288,7 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
         console.log('Speech section header:', speechSectionHeader);
         console.log('Speech rows:', speechRows);
         
-        // Prepend an empty normal row at the very top so the first line is editable
+        // Prepare a helper empty row (used only if there is no existing No section row)
         const emptyTopRow = {
           id: `new-${Date.now()}`,
           activity: '',
@@ -308,8 +300,13 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
           isNew: true,
           sectionId: 1
         };
-        // Rebuild agenda so order is: empty row, speech header + rows, then rest of agenda
-        editableAgenda = [emptyTopRow, speechSectionHeader, ...speechRows, ...editableAgenda];
+        // Partition existing agenda so that all sectionId=1 rows are kept at the very top, then speech section, then the rest
+        const baseRows = Array.isArray(editableAgenda) ? editableAgenda : [];
+        const topNoSectionRows = baseRows.filter(r => !r.isSection && normalizeSectionId(r.sectionId || r.agendaSectionId || r?.agendaSection?.sectionId || 1) === 1);
+        const otherRows = baseRows.filter(r => r.isSection || normalizeSectionId(r.sectionId || r.agendaSectionId || r?.agendaSection?.sectionId || 1) !== 1);
+        // Rebuild agenda so order is: (conditionally) empty row, all no-section rows, speech header + rows, then other rows
+        const prefixRows = topNoSectionRows.length > 0 ? topNoSectionRows : [emptyTopRow];
+        editableAgenda = [...prefixRows, speechSectionHeader, ...speechRows, ...otherRows];
         console.log('Updated agenda after inserting speeches:', editableAgenda);
       } else {
         console.log('No speaker speeches found or empty array');
@@ -479,51 +476,25 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
     const contextSectionId = (selectedRowIndex != null)
       ? computeEffectiveSectionIdForIndex(selectedRowIndex)
       : normalizeSectionId(lastSection?.sectionId || selectedSectionId || 1);
-    
-    // Check if we're in a speech section and auto-generate speech rows
-    const currentSectionName = selectedRowIndex != null ? getCurrentSectionName(selectedRowIndex) : (lastSection?.sectionName || '');
-    
-    if (isSpeechSection(currentSectionName) && speakerSpeeches.length > 0) {
-      // Auto-generate rows for all speakers
-      const speechRows = speakerSpeeches.map((speech, index) => ({
-        id: `speech-${Date.now()}-${index}`,
-        activity: `${speech.title || 'Speech'} - ${speech.objective || 'Speech Objective'}`, // Set activity for speech rows
-        minTime: parseInt(speech.minSpeechTime) || 0,
-        avgTime: calculateAverageTime(speech.minSpeechTime, speech.maxSpeechTime),
-        maxTime: parseInt(speech.maxSpeechTime) || 0,
-        userId: speech.user?.userId || speech.userId || '',
-        meetingId: parseInt(meetingId),
-        isNew: true,
-        sectionId: contextSectionId,
-        isSpeechRow: true,
-        speechData: speech
-      }));
 
-      setAgendaData(prev => {
-        const next = [...prev];
-        next.splice(insertIndex, 0, ...speechRows);
-        return next;
-      });
-    } else {
-      // Regular row
-      const newRow = {
-        id: `new-${Date.now()}`,
-        activity: '',
-        minTime: 0,
-        avgTime: 0,
-        maxTime: 0,
-        userId: '',
-        meetingId: parseInt(meetingId),
-        isNew: true,
-        sectionId: contextSectionId
-      };
+    // Always add a regular row (do not auto-add speech rows)
+    const newRow = {
+      id: `new-${Date.now()}`,
+      activity: '',
+      minTime: 0,
+      avgTime: 0,
+      maxTime: 0,
+      userId: '',
+      meetingId: parseInt(meetingId),
+      isNew: true,
+      sectionId: contextSectionId
+    };
 
-      setAgendaData(prev => {
-        const next = [...prev];
-        next.splice(insertIndex, 0, newRow);
-        return next;
-      });
-    }
+    setAgendaData(prev => {
+      const next = [...prev];
+      next.splice(insertIndex, 0, newRow);
+      return next;
+    });
   };
 
   const handleAddNoSectionRow = () => {

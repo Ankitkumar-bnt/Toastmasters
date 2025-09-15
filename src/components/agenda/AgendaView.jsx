@@ -16,14 +16,15 @@ import {
   getAllAbbreviations,
   addAbbreviation,
   updateAbbreviationsById,
-  deleteAbbreviationsById
+  deleteAbbreviationsById,
+  isAgendaPublished
 } from '../../api/AgendaJoinApi';
 import { getSpeakerSpeechByMeeting } from '../../api/SpeakerSpeechApi';
 import { getUserById } from '../../api/UserApi';
 import toastmastersLogo from '../../assets/img/toastmastersLogo.png';
 import { getAllAgendaSections } from '../../api/AgendaSectionApi';
 
-const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
+const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }) => {
   const navigate = useNavigate();
   const [meetings, setMeetings] = useState([]);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
@@ -38,6 +39,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   const [updating, setUpdating] = useState(false);
   const [sections, setSections] = useState([]);
   const [sectionById, setSectionById] = useState({});
+  const [publishing, setPublishing] = useState(false);
   
   // Club Officers Modal States
   const [showOfficersModal, setShowOfficersModal] = useState(false);
@@ -228,6 +230,22 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectedMeetingId, meetings]);
 
+  const togglePublish = async () => {
+    if (!selectedMeeting || isMemberView) return;
+    try {
+      setPublishing(true);
+      const status = selectedMeeting.isPublished ? 'unpublished' : 'published';
+      await isAgendaPublished(selectedMeeting.meetingId, status);
+      // Optimistically flip local state
+      setSelectedMeeting(prev => ({ ...prev, isPublished: !prev.isPublished }));
+    } catch (e) {
+      console.error('Failed to toggle publish:', e?.response || e);
+      setError('Failed to update publish status');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const fetchUserData = async (userId) => {
     if (userCache[userId]) return userCache[userId];
 
@@ -245,6 +263,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleEditClubInfo = async () => {
+    if (isMemberView) return;
     try {
       const response = await getAllStaticInfo();
       const staticInfo = response.data.data || [];
@@ -305,6 +324,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   // ================== CLUB OFFICERS HANDLERS ==================
   
   const handleEditOfficers = async () => {
+    if (isMemberView) return;
     try {
       const response = await getAllClubOfficer();
       setOfficersData(response.data.data || []);
@@ -359,6 +379,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleAddOfficer = async () => {
+    if (isMemberView) return;
     try {
       await addClubOfficer(newOfficer);
       
@@ -383,6 +404,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   // ================== WOD/POD HANDLERS ==================
   
   const handleEditWOD = async () => {
+    if (isMemberView) return;
     if (!selectedMeeting) return;
     
     try {
@@ -421,6 +443,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleEditPOD = async () => {
+    if (isMemberView) return;
     if (!selectedMeeting) return;
     
     try {
@@ -459,6 +482,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleSaveWOD = async () => {
+    if (isMemberView) return;
     setUpdating(true);
     try {
       const updatePromises = wodData.map(async (item) => {
@@ -491,6 +515,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleSavePOD = async () => {
+    if (isMemberView) return;
     setUpdating(true);
     try {
       const updatePromises = podData.map(async (item) => {
@@ -525,6 +550,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   // ================== ABBREVIATIONS HANDLERS ==================
   
   const handleEditAbbreviations = async () => {
+    if (isMemberView) return;
     try {
       const response = await getAllAbbreviations();
       const abbreviations = response.data.data || [];
@@ -539,6 +565,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleSaveAbbreviations = async () => {
+    if (isMemberView) return;
     setUpdating(true);
     try {
       const updatePromises = editingAbbreviations.map(async (item, index) => {
@@ -577,6 +604,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleDeleteAbbreviation = async (abbreviationId, index) => {
+    if (isMemberView) return;
     try {
       await deleteAbbreviationsById(abbreviationId);
       
@@ -596,6 +624,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
   };
 
   const handleAddAbbreviation = async () => {
+    if (isMemberView) return;
     try {
       await addAbbreviation(newAbbreviation);
       
@@ -676,7 +705,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
               <Users className="me-2" size={20} />
               Club Officers
             </h5>
-            <button className="btn btn-sm btn-light">Edit</button>
+            {!isMemberView && <button className="btn btn-sm btn-light" onClick={handleEditOfficers}>Edit</button>}
           </Card.Header>
           <Card.Body>
             <p className="text-muted">No club officers data available</p>
@@ -696,7 +725,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
             <Users className="me-2" size={20} />
             Club Officers
           </h5>
-          <button className="btn btn-sm btn-light" onClick={handleEditOfficers}>Edit</button>
+          {!isMemberView && <button className="btn btn-sm btn-light" onClick={handleEditOfficers}>Edit</button>}
         </Card.Header>
         <Card.Body>
           <Row>
@@ -851,20 +880,22 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
               <Clock className="me-2" size={20} />
               Meeting Agenda
             </h5>
-            <button
-              className="btn btn-sm btn-light"
-              onClick={() => {
-                if (selectedMeeting?.meetingId) {
-                  if (onEditAgenda) {
-                    onEditAgenda(selectedMeeting.meetingId);
-                  } else {
-                    navigate(`/update-agenda/${selectedMeeting.meetingId}`);
+            {!isMemberView && (
+              <button
+                className="btn btn-sm btn-light"
+                onClick={() => {
+                  if (selectedMeeting?.meetingId) {
+                    if (onEditAgenda) {
+                      onEditAgenda(selectedMeeting.meetingId);
+                    } else {
+                      navigate(`/update-agenda/${selectedMeeting.meetingId}`);
+                    }
                   }
-                }
-              }}
-            >
-              Edit
-            </button>
+                }}
+              >
+                Edit
+              </button>
+            )}
           </Card.Header>
           <Card.Body>
             <p className="text-muted">No agenda items available</p>
@@ -890,20 +921,22 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
             <Clock className="me-2" size={20} />
             Meeting Agenda
           </h5>
-          <button
-            className="btn btn-sm btn-light"
-            onClick={() => {
-              if (selectedMeeting?.meetingId) {
-                if (onEditAgenda) {
-                  onEditAgenda(selectedMeeting.meetingId);
-                } else {
-                  navigate(`/update-agenda/${selectedMeeting.meetingId}`);
+          {!isMemberView && (
+            <button
+              className="btn btn-sm btn-light"
+              onClick={() => {
+                if (selectedMeeting?.meetingId) {
+                  if (onEditAgenda) {
+                    onEditAgenda(selectedMeeting.meetingId);
+                  } else {
+                    navigate(`/update-agenda/${selectedMeeting.meetingId}`);
+                  }
                 }
-              }
-            }}
-          >
-            Edit
-          </button>
+              }}
+            >
+              Edit
+            </button>
+          )}
         </Card.Header>
         <Card.Body>
           <Table responsive bordered hover style={{ border: "2px solid black" }}>
@@ -1014,7 +1047,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
                 <BookOpen className="me-2" size={20} />
                 Word of the Day (WOD)
               </h5>
-              <button className="btn btn-sm btn-light" onClick={handleEditWOD}>Edit</button>
+              {!isMemberView && <button className="btn btn-sm btn-light" onClick={handleEditWOD}>Edit</button>}
             </Card.Header>
             <Card.Body>
               {wodItems.length > 0 ? (
@@ -1034,7 +1067,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
                 <BookOpen className="me-2" size={20} />
                 Phrase of the Day (POD)
               </h5>
-              <button className="btn btn-sm btn-light" onClick={handleEditPOD}>Edit</button>
+              {!isMemberView && <button className="btn btn-sm btn-light" onClick={handleEditPOD}>Edit</button>}
             </Card.Header>
             <Card.Body>
               {podItems.length > 0 ? (
@@ -1059,7 +1092,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
             <Card className="mb-4">
               <Card.Header className="bg-secondary text-white d-flex justify-content-between align-items-center">
                 <h5 className="mb-0">Abbreviations</h5>
-                <button className="btn btn-sm btn-light" onClick={handleEditAbbreviations}>Edit</button>
+                {!isMemberView && <button className="btn btn-sm btn-light" onClick={handleEditAbbreviations}>Edit</button>}
               </Card.Header>
               <Card.Body>
                 <p className="text-muted">No abbreviations available</p>
@@ -1119,7 +1152,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
           <Award className="me-2" size={20} />
           Club Information
         </h5>
-        <button className="btn btn-sm btn-light" onClick={handleEditClubInfo}>Edit</button>
+        {!isMemberView && <button className="btn btn-sm btn-light" onClick={handleEditClubInfo}>Edit</button>}
       </Card.Header>
       <Card.Body className="text-center">
         <h4 className="mb-2">{getStaticInfo('Club Name') || 'Toastmasters Club'}</h4>
@@ -1596,60 +1629,78 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId }) => {
 
   return (
     <Container fluid>
-      <div className="mb-4">
-        <h2>Meeting Agenda</h2>
-        <p className="text-muted">Select a meeting to view its agenda and details</p>
-      </div>
+      {!isMemberView && (
+        <>
+          <div className="mb-4">
+            <h2>Meeting Agenda</h2>
+            <p className="text-muted">Select a meeting to view its agenda and details</p>
+          </div>
 
-      <Card className="mb-4">
-        <Card.Body>
-          <Row className="align-items-center">
-            <Col md={6}>
-              <label className="form-label fw-bold">Select Meeting:</label>
-              <Dropdown>
-                <Dropdown.Toggle variant="outline-primary" className="w-400 text-start">
-                  {selectedMeeting
-                    ? `${selectedMeeting.meetingTheme} - ${new Date(selectedMeeting.meetingDate).toLocaleDateString()}`
-                    : 'Choose a meeting...'}
-                </Dropdown.Toggle>
-                <Dropdown.Menu className="w-100" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                  {meetingsLoading ? (
-                    <Dropdown.Item disabled>
-                      <Spinner animation="border" size="sm" className="me-2" />
-                      Loading meetings...
-                    </Dropdown.Item>
-                  ) : meetings.length === 0 ? (
-                    <Dropdown.Item disabled>No upcoming meetings found</Dropdown.Item>
-                  ) : (
-                    meetings.map((meeting) => (
-                      <Dropdown.Item
-                        key={meeting.meetingId}
-                        onClick={() => handleMeetingSelect(meeting)}
-                      >
-                        <div>
-                          <strong>{meeting.meetingTheme}</strong>
-                          <br />
-                          <small className="text-muted">
-                            {new Date(meeting.meetingDate).toLocaleDateString()} - {meeting.meetingLocation}
-                          </small>
-                        </div>
-                      </Dropdown.Item>
-                    ))
+          <Card className="mb-4">
+            <Card.Body>
+              <Row className="align-items-center">
+                <Col md={6}>
+                  <label className="form-label fw-bold">Select Meeting:</label>
+                  <Dropdown>
+                    <Dropdown.Toggle variant="outline-primary" className="w-400 text-start">
+                      {selectedMeeting
+                        ? `${selectedMeeting.meetingTheme} - ${new Date(selectedMeeting.meetingDate).toLocaleDateString()}`
+                        : 'Choose a meeting...'}
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu className="w-100" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      {meetingsLoading ? (
+                        <Dropdown.Item disabled>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          Loading meetings...
+                        </Dropdown.Item>
+                      ) : meetings.length === 0 ? (
+                        <Dropdown.Item disabled>No upcoming meetings found</Dropdown.Item>
+                      ) : (
+                        meetings.map((meeting) => (
+                          <Dropdown.Item
+                            key={meeting.meetingId}
+                            onClick={() => handleMeetingSelect(meeting)}
+                          >
+                            <div>
+                              <strong>{meeting.meetingTheme}</strong>
+                              <br />
+                              <small className="text-muted">
+                                {new Date(meeting.meetingDate).toLocaleDateString()} - {meeting.meetingLocation}
+                              </small>
+                            </div>
+                          </Dropdown.Item>
+                        ))
+                      )}
+                    </Dropdown.Menu>
+                  </Dropdown>
+                </Col>
+                <Col md={6} className="d-flex justify-content-end align-items-end">
+                  {!isMemberView && selectedMeeting && (
+                    <Button
+                      variant={selectedMeeting.isPublished ? 'warning' : 'success'}
+                      onClick={togglePublish}
+                      disabled={publishing}
+                    >
+                      {publishing ? (
+                        <>
+                          <Spinner animation="border" size="sm" className="me-2" />
+                          Processing...
+                        </>
+                      ) : selectedMeeting.isPublished ? 'Unpublish' : 'Publish'}
+                    </Button>
                   )}
-                </Dropdown.Menu>
-              </Dropdown>
-            </Col>
-            <Col md={6}>
-              {loading && (
-                <div className="text-center">
-                  <Spinner animation="border" className="me-2" />
-                  Loading agenda data...
-                </div>
-              )}
-            </Col>
-          </Row>
-        </Card.Body>
-      </Card>
+                  {loading && (
+                    <div className="text-center">
+                      <Spinner animation="border" className="me-2" />
+                      Loading agenda data...
+                    </div>
+                  )}
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+        </>
+      )}
 
       {error && (
         <Alert variant="danger" className="mb-4">
