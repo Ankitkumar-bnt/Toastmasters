@@ -36,4 +36,6 @@ public class Meeting {
     private String category;
 
     private int deleteStatus = 1;
+
+    private boolean isPublished = false;
 }

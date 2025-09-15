@@ -48,7 +48,11 @@ public class MeetingServiceImpl implements MeetingService {
             availableMember.setUser(user);
             availableMember.setMeeting(meeting);
             availableMember.setDate(meeting.getMeetingDate());
-            availableMember.setStatus(-1);
+            if(user.getUserType().equalsIgnoreCase("admin")){
+                availableMember.setStatus(1);
+            }else
+                availableMember.setStatus(-1);
+
             availableList.add(availableMember);
         }
         availableMembersRepository.saveAll(availableList);

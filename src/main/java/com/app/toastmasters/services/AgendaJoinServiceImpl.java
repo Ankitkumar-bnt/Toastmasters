@@ -1,11 +1,13 @@
 package com.app.toastmasters.services;
 
 import com.app.toastmasters.constants.Constant;
+import com.app.toastmasters.dto.responseDTO.MeetingResponseDTO;
 import com.app.toastmasters.entity.Agenda;
 import com.app.toastmasters.dto.responseDTO.AgendaJoinDTO;
 import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.User;
 import com.app.toastmasters.entity.agenda.*;
+import com.app.toastmasters.exceptions.EmptyObjectException;
 import com.app.toastmasters.mapper.*;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.repository.*;
@@ -35,8 +37,9 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
     private final SpeakerSpeechMapper speechMapper;
     private final GrammarianMapper grammarianMapper;
     private final AbbreviationsMapper abbreviationsMapper;
+    private final MeetingMapper meetingMapper;
 
-    public AgendaJoinServiceImpl(AgendaStaticInfoRepository agendaStaticInfo, ClubOfficersRepository clubOfficers, AgendaRepository agenda, SpeakerSpeechRepository speakerSpeech, GrammarianRepository grammarianRepo, AbbreviationRepository abbreviations, UserRepository userRepository, MeetingRepository meetingRepository, AgendaStaticInfoMapper staticInfoMapper, ClubOfficersMapper officersMapper, AgendaMapper agendaMapper, SpeakerSpeechMapper speechMapper, GrammarianMapper grammarianMapper, AbbreviationsMapper abbreviationsMapper) {
+    public AgendaJoinServiceImpl(AgendaStaticInfoRepository agendaStaticInfo, ClubOfficersRepository clubOfficers, AgendaRepository agenda, SpeakerSpeechRepository speakerSpeech, GrammarianRepository grammarianRepo, AbbreviationRepository abbreviations, UserRepository userRepository, MeetingRepository meetingRepository, AgendaStaticInfoMapper staticInfoMapper, ClubOfficersMapper officersMapper, AgendaMapper agendaMapper, SpeakerSpeechMapper speechMapper, GrammarianMapper grammarianMapper, AbbreviationsMapper abbreviationsMapper, MeetingMapper meetingMapper) {
         this.agendaStaticInfo = agendaStaticInfo;
         this.clubOfficers = clubOfficers;
         this.agenda = agenda;
@@ -51,6 +54,7 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
         this.speechMapper = speechMapper;
         this.grammarianMapper = grammarianMapper;
         this.abbreviationsMapper = abbreviationsMapper;
+        this.meetingMapper = meetingMapper;
     }
 
     @Override
@@ -89,5 +93,26 @@ public class AgendaJoinServiceImpl implements AgendaJoinService{
         ResponseMessage<AgendaJoinDTO> responseMessage =
                 new ResponseMessage<>(HttpStatus.OK, Constant.AGENDA_DISPLAY_SUCCESS, agendaJoinDTO);
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
+    @Override
+    public ResponseEntity<ResponseMessage<MeetingResponseDTO>> isAgendaPublished(int meetingId, String status) {
+        Optional<Meeting> meeting = meetingRepository.findById(meetingId);
+
+        if(meeting.isEmpty())
+            throw new EmptyObjectException(Constant.EMPTY_OBJECT);
+
+        Meeting meetingData = meeting.get();
+        if(status.equalsIgnoreCase("published"))
+            meetingData.setPublished(true);
+        else
+            meetingData.setPublished(false);
+
+        Meeting meetingPublished = meetingRepository.save(meetingData);
+
+        ResponseMessage<MeetingResponseDTO> responseMessage =
+                new ResponseMessage<>(HttpStatus.CREATED, Constant.AGENDA_IS_PUBLISHED
+                        ,meetingMapper.toDTO(meetingPublished));
+        return ResponseEntity.status(HttpStatus.CREATED).body(responseMessage);
     }
 }

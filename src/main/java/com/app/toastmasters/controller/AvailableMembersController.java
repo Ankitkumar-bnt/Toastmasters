@@ -34,6 +34,12 @@ public class AvailableMembersController {
         return availableMembersService.getAllMemberAvailability();
     }
 
+    @GetMapping("/getAllMemberAvailabilityByMeetingId/{meetingId}")
+    public ResponseEntity<ResponseMessage<List<AvailableMemberResponseDTO>>> getAllMemberAvailabilityByMeetingId(@PathVariable int meetingId){
+
+        return availableMembersService.getAllMemberAvailabilityByMeetingId(meetingId);
+    }
+
     @GetMapping("/getAvailabilityById/{userId}")
     public ResponseEntity<ResponseMessage<List<AvailableMemberResponseDTO>>> getUserAvailabilityByUserId(@PathVariable int userId){
 

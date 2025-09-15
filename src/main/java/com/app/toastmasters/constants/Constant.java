@@ -63,6 +63,7 @@ public class Constant {
 	public static final String SPEAKER_SPEECH_DELETED = "Speaker Speech deleted successfully";
 	public static final String SPEAKER_SPEECH_NOT_FOUND = "Speaker Speech not found";
 	public static final String AGENDA_DISPLAY_SUCCESS = "Agenda display successfully";
+    public static final String AGENDA_IS_PUBLISHED = "Agenda is published";
 
 	// Grammarian Messages
 	public static final String GRAMMARIAN_ADDED_SUCCESS = "Grammarian words added successfully";
@@ -107,4 +108,12 @@ public class Constant {
     public static final String AGENDA_SECTION_DELETED_SUCCESS = "Agenda section deleted successfully";
     public static final String AGENDA_SECTION_NOT_FOUND = "Agenda section not found";
 
+
+    public static final String GEM_OF_THE_MONTH = "Gem of the month";
+    public static final String MEETING_WINNER_ADDED = "Meeting winner is added";
+    public static final String NOT_FOUND = "Requested resource not found";
+    public static final String FOUND_ALL_MEETING_WINNERS = "Fetched all winners for the meeting successfully";
+    public static final String FOUND_ALL_USER_WINNERS = "Fetched all winners for the user successfully";
+    public static final String MEETING_WINNER_UPDATED = "Meeting winner updated successfully";
+    public static final String MEETING_WINNER_DELETED = "Meeting winner deleted successfully";
 }

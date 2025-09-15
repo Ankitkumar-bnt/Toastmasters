@@ -17,4 +17,5 @@ public class MeetingResponseDTO {
     private String meetingLocation;
     private String category;
     private int deleteStatus;
+    private boolean isPublished;
 }

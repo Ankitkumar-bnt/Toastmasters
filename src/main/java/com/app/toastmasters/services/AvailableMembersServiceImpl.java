@@ -98,4 +98,26 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
                                 .collect(Collectors.toList()));
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
+
+    @Override
+    public ResponseEntity<ResponseMessage<List<AvailableMemberResponseDTO>>> getAllMemberAvailabilityByMeetingId(int meetingId) {
+        List<AvailableMembers> allMembers = availableMembersRepository.findAllByMeeting_MeetingId(meetingId);
+
+        if (allMembers.isEmpty())
+            throw new EmptyListException(Constant.MEMBER_NOT_FOUND);
+
+        List<AvailableMemberResponseDTO> filteredMembers = allMembers.stream()
+                .filter(member -> member.getStatus() == 1)
+                .map(mapper::toDTO)
+                .collect(Collectors.toList());
+
+        if (filteredMembers.isEmpty())
+            throw new EmptyListException(Constant.MEMBER_NOT_FOUND);
+
+        ResponseMessage<List<AvailableMemberResponseDTO>> responseMessage =
+                new ResponseMessage<List<AvailableMemberResponseDTO>>(HttpStatus.OK, Constant.FOUND_ALL_MEMBERS, filteredMembers);
+
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
 }
