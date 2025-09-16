@@ -273,7 +273,7 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
         // Create speech rows
         const speechRows = speakerSpeeches.map((speech, index) => ({
           id: `speech-${speech.speechId || Date.now()}-${index}`,
-          activity: speech.objective || 'Speech Objective',
+          activity: speech.title || 'Speech Title',
           minTime: parseInt(speech.minSpeechTime) || 0,
           avgTime: Math.round(((parseInt(speech.minSpeechTime) || 0) + (parseInt(speech.maxSpeechTime) || 0)) / 2),
           maxTime: parseInt(speech.maxSpeechTime) || 0,
@@ -1137,7 +1137,7 @@ const UpdateAgenda = ({ meetingId, onBack }) => {
                                   </div>
                                   <div style={{ width: '70%', padding: '2px' }}>
                                     <small className="text-muted">
-                                      {item.speechData.objective || 'Speech Objective'}
+                                      {item.speechData.title || 'Speech title'}
                                     </small>
                                   </div>
                                 </div>
