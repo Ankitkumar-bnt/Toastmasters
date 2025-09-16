@@ -2,7 +2,7 @@ import React from 'react';
 import { Card, Row, Col } from 'react-bootstrap';
 import { Users, UserPlus, Calendar, Award } from 'lucide-react';
 
-const DashboardStats = ({ totalMembers, totalMeetings, onMeetingsClick }) => {
+const DashboardStats = ({ totalMembers, totalMeetings, onMeetingsClick, onBackoutsClick }) => {
     
   const stats = [
     {
@@ -29,11 +29,13 @@ const DashboardStats = ({ totalMembers, totalMeetings, onMeetingsClick }) => {
       onClick: onMeetingsClick
     },
     {
-      title: 'Active Mentors',
-      value: Math.floor(totalMembers * 0.3),
+      title: 'Track Backouts',
+      value: '',
       icon: Award,
       color: 'warning',
-      bgColor: 'rgba(255, 193, 7, 0.1)'
+      bgColor: 'rgba(255, 193, 7, 0.1)',
+      clickable: true,
+      onClick: onBackoutsClick
     }
   ];
 

@@ -40,6 +40,8 @@ function MemberDashboard({ onLogout }) {
     }
   }, []); // Empty dependency array to run only on mount
 
+  
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -430,6 +432,8 @@ function MemberDashboard({ onLogout }) {
           </Modal.Footer>
         </Form>
       </Modal>
+
+      
     </div>
   );
 }

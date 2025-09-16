@@ -19,52 +19,63 @@ const GemOfMonthModal = ({ show, onHide }) => {
       setLoading(true);
       setError(null);
       const response = await getGemOfMonth();
-      
-      // Get current date for filtering
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth(); // 0-based (0 = January, 8 = September)
-      
-      // Filter out current and future months, keep only past months
-      const pastMonthsData = response.data.filter(gem => {
-        const gemDate = new Date(Date.parse(gem.month + " 1, " + currentYear));
-        return gemDate.getMonth() < currentMonth;
-      });
-      
-      // Sort past months data in descending order (most recent first)
-      const sortedData = pastMonthsData.sort((a, b) => {
-        const monthA = new Date(Date.parse(a.month + " 1, " + currentYear));
-        const monthB = new Date(Date.parse(b.month + " 1, " + currentYear));
-        return monthB - monthA;
-      });
-      
-      setGemData(sortedData);
+      const list = Array.isArray(response) ? response : [];
+      setGemData(list);
     } catch (err) {
       console.error('Error fetching gem of month data:', err);
-      
       setError('Failed to load Gem of Month data. Please ensure your Spring Boot backend is running on port 8888.');
     } finally {
       setLoading(false);
     }
   };
 
-  const getCurrentMonth = () => {
-    const now = new Date();
-    return now.toLocaleString('default', { month: 'long' });
+  const monthIndexFromString = (raw) => {
+    if (!raw || typeof raw !== 'string') return -1;
+    const s = raw.trim().toLowerCase();
+    const abbr = s.slice(0, 3);
+    const map = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+    if (map[abbr] !== undefined) return map[abbr];
+    const d = Date.parse(`${raw} 1, 2000`);
+    if (!Number.isNaN(d)) return new Date(d).getMonth();
+    return -1;
   };
 
-  const getLastMonth = () => {
-    const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    return lastMonth.toLocaleString('default', { month: 'long' });
+  const getMonthString = (gem) => {
+    return (
+      (gem?.month && String(gem.month)) ||
+      (gem?.monthName && String(gem.monthName)) ||
+      (gem?.months && String(gem.months)) ||
+      (gem?.month_label && String(gem.month_label)) ||
+      ''
+    );
   };
 
-  const lastMonthName = getLastMonth();
+  const sortByMonthDesc = (a, b) => monthIndexFromString(b?.month) - monthIndexFromString(a?.month);
 
-  // Since gemData is already filtered to contain only past months,
-  // we just need to separate last month from other past months
-  const lastMonthGems = gemData.filter(gem => gem.month === lastMonthName);
-  const otherPastMonthsGems = gemData.filter(gem => gem.month !== lastMonthName);
+  const now = new Date();
+  const currentMonthIndex = now.getMonth();
+
+  const dataMonthIndexes = (gemData || [])
+    .map(g => monthIndexFromString(getMonthString(g)))
+    .filter(idx => idx >= 0 && idx < currentMonthIndex);
+
+  const fallbackLastIndex = dataMonthIndexes.length > 0 ? Math.max(...dataMonthIndexes) : currentMonthIndex - 1;
+  const effectiveLastIndex = (gemData || []).some(g => monthIndexFromString(getMonthString(g)) === fallbackLastIndex)
+    ? fallbackLastIndex
+    : fallbackLastIndex;
+
+  const effectiveLastName = new Date(2000, effectiveLastIndex, 1).toLocaleString('default', { month: 'long' });
+
+  // Swap the data: show otherPastMonthsGems in first section and lastMonthGems in second
+  const lastMonthGems = (gemData || [])
+    .filter(gem => monthIndexFromString(getMonthString(gem)) !== effectiveLastIndex)
+    .sort(sortByMonthDesc);
+
+  const otherPastMonthsGems = (gemData || [])
+    .filter(gem => monthIndexFromString(getMonthString(gem)) === effectiveLastIndex);
 
   const renderGemCard = (gem, index) => (
     <Col md={6} lg={4} key={index} className="mb-3">
@@ -78,7 +89,7 @@ const GemOfMonthModal = ({ show, onHide }) => {
           </p>
           <Badge bg="primary" className="mb-2">
             <Calendar size={14} className="me-1" />
-            {gem.month}
+            {getMonthString(gem)}
           </Badge>
           <div className="mt-2">
             <small className="text-success fw-bold">
@@ -116,11 +127,11 @@ const GemOfMonthModal = ({ show, onHide }) => {
           </Alert>
         ) : (
           <>
-            {/* Last Month's Gems Section */}
-            <div className="mb-5">
+            {/* Top Section: Last Month's Gems (now showing otherPastMonthsGems) */}
+            <div className="mb-4">
               <div className="d-flex align-items-center mb-4">
                 <Award size={24} className="text-warning me-2" />
-                <h4 className="mb-0 text-primary">Last Month's Gems ({lastMonthName})</h4>
+                <h4 className="mb-0 text-primary">Last Month's Gems ({effectiveLastName})</h4>
               </div>
               {lastMonthGems.length > 0 ? (
                 <Row>
@@ -130,13 +141,15 @@ const GemOfMonthModal = ({ show, onHide }) => {
                 <Card className="border-0 bg-light">
                   <Card.Body className="text-center py-4">
                     <Award size={48} className="text-muted mb-3" />
-                    <h6 className="text-muted">No gems awarded for {lastMonthName}</h6>
+                    <h6 className="text-muted">No gems awarded for {effectiveLastName}</h6>
                   </Card.Body>
                 </Card>
               )}
             </div>
 
-            {/* Other Past Months Section */}
+            <hr className="my-4" />
+
+            {/* Bottom Section: Other Past Months (now showing lastMonthGems) */}
             <div>
               <div className="d-flex align-items-center mb-4">
                 <Calendar size={24} className="text-info me-2" />
