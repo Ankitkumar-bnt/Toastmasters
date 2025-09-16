@@ -1,0 +1,12 @@
+package com.app.toastmasters.repository;
+
+import com.app.toastmasters.entity.Backouts;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface BackoutRepository extends JpaRepository<Backouts, Integer> {
+    List<Backouts> findAllByUserId(int userId);
+
+    Backouts findByUserId(int userId);
+}

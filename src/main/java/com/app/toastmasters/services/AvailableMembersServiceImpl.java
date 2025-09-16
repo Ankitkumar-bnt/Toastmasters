@@ -3,6 +3,7 @@ package com.app.toastmasters.services;
 import com.app.toastmasters.constants.Constant;
 import com.app.toastmasters.dto.responseDTO.AvailableMemberResponseDTO;
 import com.app.toastmasters.entity.AvailableMembers;
+import com.app.toastmasters.entity.Backouts;
 import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.User;
 import com.app.toastmasters.exceptions.EmptyListException;
@@ -11,30 +12,58 @@ import com.app.toastmasters.exceptions.MemberNotFoundException;
 import com.app.toastmasters.mapper.AvailableMemberMapper;
 import com.app.toastmasters.message.ResponseMessage;
 import com.app.toastmasters.repository.AvailableMembersRepository;
+import com.app.toastmasters.repository.BackoutRepository;
 import com.app.toastmasters.repository.MeetingRepository;
 import com.app.toastmasters.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class AvailableMembersServiceImpl implements AvailableMembersService{
 
     private final AvailableMembersRepository availableMembersRepository;
     private final AvailableMemberMapper mapper;
     private final UserRepository userRepository;
     private final MeetingRepository meetingRepository;
+    private final BackoutRepository backoutRepository;
 
-    public AvailableMembersServiceImpl(AvailableMembersRepository availableMembersRepository, AvailableMemberMapper mapper, UserRepository userRepository, MeetingRepository meetingRepository) {
-        this.availableMembersRepository = availableMembersRepository;
-        this.mapper = mapper;
-        this.userRepository = userRepository;
-        this.meetingRepository = meetingRepository;
+    private void countBackouts(Integer availability, AvailableMembers availableMembers) {
+        LocalDate meetingDate = availableMembers.getDate();
+        LocalDate today = LocalDate.now();
+        long diffDays = ChronoUnit.DAYS.between(today, meetingDate);
+
+        if (diffDays <= 7 && diffDays >= 0) {
+            Backouts backout = backoutRepository.findByUserId(availableMembers.getUser().getUserId());
+
+            if (availableMembers.getStatus() == 1 && availability != 1) {
+                if (backout != null) {
+                    backout.setTotalBackoutCount(backout.getTotalBackoutCount() + 1);
+                    backoutRepository.save(backout);
+                } else {
+                    Backouts newBackout = new Backouts();
+                    newBackout.setUserId(availableMembers.getUser().getUserId());
+                    newBackout.setTotalBackoutCount(1);
+                    backoutRepository.save(newBackout);
+                }
+            }
+            else if (availableMembers.getStatus() != 1 && availability == 1) {
+                if (backout != null && backout.getTotalBackoutCount() > 0) {
+                    backout.setTotalBackoutCount(backout.getTotalBackoutCount() - 1);
+                    backoutRepository.save(backout);
+                }
+            }
+        }
     }
+
 
     @Override
     public ResponseEntity<ResponseMessage<AvailableMemberResponseDTO>> markAvailability(
@@ -52,6 +81,9 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
         Meeting meetingData = meeting.get();
 
         AvailableMembers availableMembers = availableMembersRepository.findByUserAndMeeting(userData, meetingData);
+
+        countBackouts(availability, availableMembers);// helper method calling
+
         availableMembers.setStatus(availability);
 
         AvailableMembers save = availableMembersRepository.save(availableMembers);
@@ -119,5 +151,7 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
 
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
+
+
 
 }
