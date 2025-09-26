@@ -17,9 +17,9 @@ import {
   addAbbreviation,
   updateAbbreviationsById,
   deleteAbbreviationsById,
-  isAgendaPublished
+  isAgendaPublished,
+  getSpeakerSpeechesByMeeting
 } from '../../api/AgendaJoinApi';
-import { getSpeakerSpeechByMeeting } from '../../api/SpeakerSpeechApi';
 import { getUserById } from '../../api/UserApi';
 import toastmastersLogo from '../../assets/img/toastmastersLogo.png';
 import { getAllAgendaSections } from '../../api/AgendaSectionApi';
@@ -89,12 +89,19 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     };
     loadSections();
   }, []);
-
   const loadMeetings = async () => {
     try {
       setMeetingsLoading(true);
       const response = await getAllUpcomingMeetings();
-      setMeetings(response.data.data || []);
+      const meetings = response.data.data || [];
+      // Preserve the actual isPublished value from database, check both field names
+      const meetingsWithPublishStatus = meetings.map(meeting => ({
+        ...meeting,
+        isPublished: meeting.isPublished === true || meeting.isPublished === 'true' || meeting.isPublished === 1 ||
+                    meeting.published === true || meeting.published === 'true' || meeting.published === 1
+      }));
+      console.log('Loaded meetings with publish status:', meetingsWithPublishStatus);
+      setMeetings(meetingsWithPublishStatus);
     } catch (err) {
       console.error('Error loading meetings:', err);
       setError('Failed to load meetings');
@@ -122,7 +129,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
       if (!Array.isArray(speakerSpeeches) || speakerSpeeches.length === 0) {
         try {
           console.log('AgendaView: fetching speakerSpeeches via SpeakerSpeechApi fallback...');
-          const ssResp = await getSpeakerSpeechByMeeting(meeting.meetingId);
+          const ssResp = await getSpeakerSpeechesByMeeting(meeting.meetingId);
           const payload = ssResp?.data ?? ssResp;
           speakerSpeeches = Array.isArray(payload) ? payload : [payload].filter(Boolean);
           console.log('AgendaView: fetched speakerSpeeches via fallback:', speakerSpeeches);
@@ -202,6 +209,28 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
       }
       
       setAgendaData(agendaResponse);
+      
+      // Update selectedMeeting with the latest isPublished status from the backend
+      if (agendaResponse?.meeting) {
+        const actualPublishStatus = agendaResponse.meeting.isPublished === true || 
+                                   agendaResponse.meeting.isPublished === 'true' || 
+                                   agendaResponse.meeting.isPublished === 1 ||
+                                   agendaResponse.meeting.published === true || 
+                                   agendaResponse.meeting.published === 'true' || 
+                                   agendaResponse.meeting.published === 1;
+        console.log('Backend meeting isPublished/published value:', agendaResponse.meeting.isPublished || agendaResponse.meeting.published, 'Converted to:', actualPublishStatus);
+        setSelectedMeeting(prev => ({
+          ...prev,
+          isPublished: actualPublishStatus
+        }));
+        
+        // Also update the meetings array to keep it in sync
+        setMeetings(prevMeetings => prevMeetings.map(m => 
+          m.meetingId === meeting.meetingId 
+            ? { ...m, isPublished: actualPublishStatus }
+            : m
+        ));
+      }
     } catch (err) {
       console.error('Error loading agenda:', err);
       if (err.code === 'ERR_NETWORK' || err.message.includes('CORS')) {
@@ -234,10 +263,42 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     if (!selectedMeeting || isMemberView) return;
     try {
       setPublishing(true);
+      console.log('Current selectedMeeting.isPublished:', selectedMeeting.isPublished);
       const status = selectedMeeting.isPublished ? 'unpublished' : 'published';
-      await isAgendaPublished(selectedMeeting.meetingId, status);
-      // Optimistically flip local state
-      setSelectedMeeting(prev => ({ ...prev, isPublished: !prev.isPublished }));
+      console.log('Sending status to backend:', status);
+      const response = await isAgendaPublished(selectedMeeting.meetingId, status);
+      
+      // Extract the updated meeting data from the backend response
+      console.log('Backend response:', response);
+      const updatedMeeting = response?.data?.data || response?.data;
+      console.log('Updated meeting from backend:', updatedMeeting);
+      
+      // Properly convert the backend response to boolean, check both field names
+      let newPublishStatus;
+      if (updatedMeeting?.isPublished !== undefined || updatedMeeting?.published !== undefined) {
+        newPublishStatus = updatedMeeting.isPublished === true || 
+                          updatedMeeting.isPublished === 'true' || 
+                          updatedMeeting.isPublished === 1 ||
+                          updatedMeeting.published === true || 
+                          updatedMeeting.published === 'true' || 
+                          updatedMeeting.published === 1;
+      } else {
+        // Fallback: toggle the current state
+        newPublishStatus = !selectedMeeting.isPublished;
+      }
+      console.log('New publish status:', newPublishStatus);
+      
+      // Update local selectedMeeting state
+      setSelectedMeeting(prev => ({ ...prev, isPublished: newPublishStatus }));
+      
+      // Also update the meetings array to persist the state
+      setMeetings(prev => prev.map(meeting => 
+        meeting.meetingId === selectedMeeting.meetingId 
+          ? { ...meeting, isPublished: newPublishStatus }
+          : meeting
+      ));
+      
+      console.log(`Agenda ${newPublishStatus ? 'published' : 'unpublished'} successfully`);
     } catch (e) {
       console.error('Failed to toggle publish:', e?.response || e);
       setError('Failed to update publish status');
@@ -1113,7 +1174,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
           <Card className="mb-4">
             <Card.Header className="bg-secondary text-white d-flex justify-content-between align-items-center">
               <h5 className="mb-0">Abbreviations</h5>
-              <button className="btn btn-sm btn-light" onClick={handleEditAbbreviations}>Edit</button>
+              {!isMemberView && <button className="btn btn-sm btn-light" onClick={handleEditAbbreviations}>Edit</button>}
             </Card.Header>
             <Card.Body>
               <Row>
