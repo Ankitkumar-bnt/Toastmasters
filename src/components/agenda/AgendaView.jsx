@@ -41,6 +41,22 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
   const [sectionById, setSectionById] = useState({});
   const [publishing, setPublishing] = useState(false);
   
+  // ========== CACHING SYSTEM ==========
+  const [staticDataCache, setStaticDataCache] = useState({
+    staticInfo: null,
+    clubOfficers: null,
+    abbreviations: null,
+    sections: null,
+    lastUpdated: {
+      staticInfo: null,
+      clubOfficers: null,
+      abbreviations: null,
+      sections: null
+    }
+  });
+  const [agendaCache, setAgendaCache] = useState({});
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  
   // Club Officers Modal States
   const [showOfficersModal, setShowOfficersModal] = useState(false);
   const [showAddOfficerModal, setShowAddOfficerModal] = useState(false);
@@ -64,6 +80,93 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
   const [newAbbreviation, setNewAbbreviation] = useState({ abbreviation: '', meaning: '' });
   const [speakerSpeeches, setSpeakerSpeeches] = useState([]);
 
+  // ========== CACHING UTILITY FUNCTIONS ==========
+  const isCacheValid = (cacheType) => {
+    const lastUpdated = staticDataCache.lastUpdated[cacheType];
+    return lastUpdated && (Date.now() - lastUpdated) < CACHE_DURATION;
+  };
+
+  const updateCache = (cacheType, data) => {
+    setStaticDataCache(prev => ({
+      ...prev,
+      [cacheType]: data,
+      lastUpdated: {
+        ...prev.lastUpdated,
+        [cacheType]: Date.now()
+      }
+    }));
+  };
+
+  const invalidateCache = (cacheType) => {
+    setStaticDataCache(prev => ({
+      ...prev,
+      [cacheType]: null,
+      lastUpdated: {
+        ...prev.lastUpdated,
+        [cacheType]: null
+      }
+    }));
+  };
+
+  // ========== OPTIMIZED DATA FETCHERS ==========
+  const getCachedStaticInfo = async () => {
+    if (isCacheValid('staticInfo') && staticDataCache.staticInfo) {
+      console.log('Using cached static info');
+      return staticDataCache.staticInfo;
+    }
+    
+    console.log('Fetching fresh static info');
+    const response = await getAllStaticInfo();
+    const data = response.data.data || [];
+    updateCache('staticInfo', data);
+    return data;
+  };
+
+  const getCachedClubOfficers = async () => {
+    if (isCacheValid('clubOfficers') && staticDataCache.clubOfficers) {
+      console.log('Using cached club officers');
+      return staticDataCache.clubOfficers;
+    }
+    
+    console.log('Fetching fresh club officers');
+    const response = await getAllClubOfficer();
+    const data = response.data.data || [];
+    updateCache('clubOfficers', data);
+    return data;
+  };
+
+  const getCachedAbbreviations = async () => {
+    if (isCacheValid('abbreviations') && staticDataCache.abbreviations) {
+      console.log('Using cached abbreviations');
+      return staticDataCache.abbreviations;
+    }
+    
+    console.log('Fetching fresh abbreviations');
+    const response = await getAllAbbreviations();
+    const data = response.data.data || [];
+    updateCache('abbreviations', data);
+    return data;
+  };
+
+  const getCachedSections = async () => {
+    if (isCacheValid('sections') && staticDataCache.sections) {
+      console.log('Using cached sections');
+      return staticDataCache.sections;
+    }
+    
+    console.log('Fetching fresh sections');
+    const resp = await getAllAgendaSections();
+    const list = Array.isArray(resp)
+      ? resp
+      : Array.isArray(resp?.data)
+        ? resp.data
+        : Array.isArray(resp?.data?.data)
+          ? resp.data.data
+          : [];
+    updateCache('sections', list);
+    return list;
+  };
+
   useEffect(() => {
     loadMeetings();
   }, []);
@@ -71,14 +174,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
   useEffect(() => {
     const loadSections = async () => {
       try {
-        const resp = await getAllAgendaSections();
-        const list = Array.isArray(resp)
-          ? resp
-          : Array.isArray(resp?.data)
-            ? resp.data
-            : Array.isArray(resp?.data?.data)
-              ? resp.data.data
-              : [];
+        const list = await getCachedSections();
         setSections(list);
         const map = {};
         list.forEach(s => { map[s.sectionId || s.id] = s.sectionName; });
@@ -110,19 +206,50 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     }
   };
 
+  // ========== AGENDA CACHING ==========
+  const getCachedAgenda = async (meetingId) => {
+    const cacheKey = `agenda_${meetingId}`;
+    const cachedData = agendaCache[cacheKey];
+    
+    if (cachedData && (Date.now() - cachedData.timestamp) < CACHE_DURATION) {
+      console.log(`Using cached agenda for meeting ${meetingId}`);
+      return cachedData.data;
+    }
+    
+    console.log(`Fetching fresh agenda for meeting ${meetingId}`);
+    const response = await getAgenda(meetingId);
+    const agendaData = response.data.data;
+    
+    // Cache the agenda data
+    setAgendaCache(prev => ({
+      ...prev,
+      [cacheKey]: {
+        data: agendaData,
+        timestamp: Date.now()
+      }
+    }));
+    
+    return agendaData;
+  };
+
+  const invalidateAgendaCache = (meetingId) => {
+    const cacheKey = `agenda_${meetingId}`;
+    setAgendaCache(prev => {
+      const updated = { ...prev };
+      delete updated[cacheKey];
+      return updated;
+    });
+  };
+
   const handleMeetingSelect = async (meeting) => {
     setSelectedMeeting(meeting);
     setLoading(true);
     setError(null);
 
     try {
-      const response = await getAgenda(meeting.meetingId);
+      let agendaResponse = await getCachedAgenda(meeting.meetingId);
       console.log('=== AGENDAVIEW API RESPONSE ===');
-      console.log('Full response:', response);
-      console.log('Response data:', response.data);
-      console.log('Response data.data:', response.data.data);
-
-      let agendaResponse = response.data.data;
+      console.log('Agenda response:', agendaResponse);
       let speakerSpeeches = agendaResponse?.speakerSpeeches || [];
 
       // Fallback to SpeakerSpeechApi if not present or empty
@@ -326,8 +453,7 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
   const handleEditClubInfo = async () => {
     if (isMemberView) return;
     try {
-      const response = await getAllStaticInfo();
-      const staticInfo = response.data.data || [];
+      const staticInfo = await getCachedStaticInfo();
       setStaticInfoData(staticInfo);
       
       // Create an object with infoKey as keys for easy editing
@@ -359,10 +485,17 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
       
       await Promise.all(updatePromises);
       
-      // Reload the agenda data to reflect changes
-      if (selectedMeeting) {
-        const response = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(response.data.data);
+      // Invalidate static info cache and update local state
+      invalidateCache('staticInfo');
+      const updatedStaticInfo = await getCachedStaticInfo();
+      setStaticInfoData(updatedStaticInfo);
+      
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        setAgendaData(prev => ({
+          ...prev,
+          agendaStaticInfo: updatedStaticInfo
+        }));
       }
       
       setShowClubInfoModal(false);
@@ -387,8 +520,8 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
   const handleEditOfficers = async () => {
     if (isMemberView) return;
     try {
-      const response = await getAllClubOfficer();
-      setOfficersData(response.data.data || []);
+      const officers = await getCachedClubOfficers();
+      setOfficersData(officers);
       setShowOfficersModal(true);
     } catch (err) {
       console.error('Error loading officers:', err);
@@ -403,14 +536,17 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
         userId: officer.userId
       });
       
-      // Reload officers data
-      const response = await getAllClubOfficer();
-      setOfficersData(response.data.data || []);
+      // Invalidate cache and reload officers data
+      invalidateCache('clubOfficers');
+      const updatedOfficers = await getCachedClubOfficers();
+      setOfficersData(updatedOfficers);
       
-      // Reload agenda data to reflect changes
-      if (selectedMeeting) {
-        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(agendaResponse.data.data);
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        setAgendaData(prev => ({
+          ...prev,
+          clubOfficers: updatedOfficers
+        }));
       }
       
       setEditingOfficer(null);
@@ -424,14 +560,17 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     try {
       await deleteClubOfficerById(officerId);
       
-      // Reload officers data
-      const response = await getAllClubOfficer();
-      setOfficersData(response.data.data || []);
+      // Invalidate cache and reload officers data
+      invalidateCache('clubOfficers');
+      const updatedOfficers = await getCachedClubOfficers();
+      setOfficersData(updatedOfficers);
       
-      // Reload agenda data to reflect changes
-      if (selectedMeeting) {
-        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(agendaResponse.data.data);
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        setAgendaData(prev => ({
+          ...prev,
+          clubOfficers: updatedOfficers
+        }));
       }
     } catch (err) {
       console.error('Error deleting officer:', err);
@@ -444,14 +583,17 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     try {
       await addClubOfficer(newOfficer);
       
-      // Reload officers data
-      const response = await getAllClubOfficer();
-      setOfficersData(response.data.data || []);
+      // Invalidate cache and reload officers data
+      invalidateCache('clubOfficers');
+      const updatedOfficers = await getCachedClubOfficers();
+      setOfficersData(updatedOfficers);
       
-      // Reload agenda data to reflect changes
-      if (selectedMeeting) {
-        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(agendaResponse.data.data);
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        setAgendaData(prev => ({
+          ...prev,
+          clubOfficers: updatedOfficers
+        }));
       }
       
       setNewOfficer({ leadershipName: '', userId: '' });
@@ -560,10 +702,23 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
       
       await Promise.all(updatePromises);
       
-      // Reload agenda data
-      if (selectedMeeting) {
-        const response = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(response.data.data);
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        // Fetch updated WOD data and update grammarian section
+        const response = await getWordsDataByMeeting(selectedMeeting.meetingId);
+        const wordsDataList = response.data.data || [];
+        const updatedWODItems = wordsDataList.filter(item => item.wordType?.toUpperCase() === 'WOD');
+        
+        setAgendaData(prev => ({
+          ...prev,
+          grammarian: prev.grammarian ? prev.grammarian.map(item => {
+            if (item.wordType?.toUpperCase() === 'WOD') {
+              const updatedItem = updatedWODItems.find(wod => wod.grammarianId === item.grammarianId);
+              return updatedItem || item;
+            }
+            return item;
+          }) : updatedWODItems
+        }));
       }
       
       setShowWODModal(false);
@@ -593,10 +748,23 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
       
       await Promise.all(updatePromises);
       
-      // Reload agenda data
-      if (selectedMeeting) {
-        const response = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(response.data.data);
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        // Fetch updated POD data and update grammarian section
+        const response = await getWordsDataByMeeting(selectedMeeting.meetingId);
+        const wordsDataList = response.data.data || [];
+        const updatedPODItems = wordsDataList.filter(item => item.wordType?.toUpperCase() === 'POD');
+        
+        setAgendaData(prev => ({
+          ...prev,
+          grammarian: prev.grammarian ? prev.grammarian.map(item => {
+            if (item.wordType?.toUpperCase() === 'POD') {
+              const updatedItem = updatedPODItems.find(pod => pod.grammarianId === item.grammarianId);
+              return updatedItem || item;
+            }
+            return item;
+          }) : [...(prev.grammarian || []), ...updatedPODItems]
+        }));
       }
       
       setShowPODModal(false);
@@ -608,13 +776,14 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     }
   };
 
-  // ================== ABBREVIATIONS HANDLERS ==================
-  
   const handleEditAbbreviations = async () => {
     if (isMemberView) return;
     try {
-      const response = await getAllAbbreviations();
-      const abbreviations = response.data.data || [];
+      const abbreviations = await getCachedAbbreviations();
+      if (!abbreviations) {
+        setError('No abbreviations data found');
+        return;
+      }
       
       setAbbreviationsData(abbreviations);
       setEditingAbbreviations([...abbreviations]);
@@ -641,10 +810,18 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
       
       await Promise.all(updatePromises);
       
-      // Reload agenda data
-      if (selectedMeeting) {
-        const response = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(response.data.data);
+      // Invalidate cache and update local state
+      invalidateCache('abbreviations');
+      const updatedAbbreviations = await getCachedAbbreviations();
+      setAbbreviationsData(updatedAbbreviations);
+      setEditingAbbreviations([...updatedAbbreviations]);
+      
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        setAgendaData(prev => ({
+          ...prev,
+          abbreviations: updatedAbbreviations
+        }));
       }
       
       setShowAbbreviationsModal(false);
@@ -669,14 +846,18 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     try {
       await deleteAbbreviationsById(abbreviationId);
       
-      // Remove from local state
-      setEditingAbbreviations(prev => prev.filter((_, i) => i !== index));
-      setAbbreviationsData(prev => prev.filter((_, i) => i !== index));
+      // Invalidate cache and update local state
+      invalidateCache('abbreviations');
+      const updatedAbbreviations = await getCachedAbbreviations();
+      setEditingAbbreviations([...updatedAbbreviations]);
+      setAbbreviationsData(updatedAbbreviations);
       
-      // Reload agenda data to reflect changes
-      if (selectedMeeting) {
-        const response = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(response.data.data);
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        setAgendaData(prev => ({
+          ...prev,
+          abbreviations: updatedAbbreviations
+        }));
       }
     } catch (err) {
       console.error('Error deleting abbreviation:', err);
@@ -689,16 +870,18 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
     try {
       await addAbbreviation(newAbbreviation);
       
-      // Reload abbreviations data
-      const response = await getAllAbbreviations();
-      const abbreviations = response.data.data || [];
-      setAbbreviationsData(abbreviations);
-      setEditingAbbreviations([...abbreviations]);
+      // Invalidate cache and reload abbreviations data
+      invalidateCache('abbreviations');
+      const updatedAbbreviations = await getCachedAbbreviations();
+      setAbbreviationsData(updatedAbbreviations);
+      setEditingAbbreviations([...updatedAbbreviations]);
       
-      // Reload agenda data to reflect changes
-      if (selectedMeeting) {
-        const agendaResponse = await getAgenda(selectedMeeting.meetingId);
-        setAgendaData(agendaResponse.data.data);
+      // Update agenda data locally without full reload
+      if (selectedMeeting && agendaData) {
+        setAgendaData(prev => ({
+          ...prev,
+          abbreviations: updatedAbbreviations
+        }));
       }
       
       setNewAbbreviation({ abbreviation: '', meaning: '' });

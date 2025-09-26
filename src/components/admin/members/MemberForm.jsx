@@ -21,6 +21,93 @@ const MemberForm = ({
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Validation functions
+  const validateName = (name) => {
+    const nameRegex = /^[a-zA-Z\s]+$/;
+    if (!name.trim()) {
+      return 'Name is required';
+    }
+    if (!nameRegex.test(name)) {
+      return 'Name should contain only letters and spaces';
+    }
+    return '';
+  };
+
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim()) {
+      return 'Email is required';
+    }
+    if (!emailRegex.test(email)) {
+      return 'Please enter a valid email address';
+    }
+    return '';
+  };
+
+  const validateContact = (contact) => {
+    const contactRegex = /^\d{10}$/;
+    if (!contact.trim()) {
+      return 'Contact number is required';
+    }
+    if (!contactRegex.test(contact)) {
+      return 'Contact number should be exactly 10 digits';
+    }
+    return '';
+  };
+
+  const validatePassword = (password) => {
+    if (!password) {
+      return 'Password is required';
+    }
+    if (password.length < 6) {
+      return 'Password should be at least 6 characters long';
+    }
+    if (password.length > 15) {
+      return 'Password should be less than 15 characters long';
+    }
+    return '';
+  };
+
+  const validateField = (field, value) => {
+    let error = '';
+    switch (field) {
+      case 'userName':
+        error = validateName(value);
+        break;
+      case 'userEmail':
+        error = validateEmail(value);
+        break;
+      case 'userContact':
+        error = validateContact(value);
+        break;
+      case 'userPassword':
+        error = validatePassword(value);
+        break;
+      default:
+        break;
+    }
+    
+    setValidationErrors(prev => ({
+      ...prev,
+      [field]: error
+    }));
+    
+    return error === '';
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    errors.userName = validateName(formData.userName);
+    errors.userEmail = validateEmail(formData.userEmail);
+    errors.userContact = validateContact(formData.userContact);
+    errors.userPassword = validatePassword(formData.userPassword);
+    
+    setValidationErrors(errors);
+    
+    return Object.values(errors).every(error => error === '');
+  };
 
   useEffect(() => {
     if (editingUser) {
@@ -50,12 +137,20 @@ const MemberForm = ({
       });
     }
     setError('');
+    setValidationErrors({});
   }, [editingUser, show]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    // Validate form before submission
+    if (!validateForm()) {
+      setLoading(false);
+      setError('Please fix the validation errors before submitting.');
+      return;
+    }
 
     try {
       await onSubmit(formData);
@@ -68,7 +163,17 @@ const MemberForm = ({
   };
 
   const handleChange = (field, value) => {
+    // For contact field, only allow numbers
+    if (field === 'userContact') {
+      value = value.replace(/\D/g, '');
+    }
+    
     setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Real-time validation for key fields
+    if (['userName', 'userEmail', 'userContact', 'userPassword'].includes(field)) {
+      validateField(field, value);
+    }
   };
 
   return (
@@ -90,7 +195,11 @@ const MemberForm = ({
                   onChange={(e) => handleChange('userName', e.target.value)}
                   required
                   placeholder="Enter full name"
+                  isInvalid={!!validationErrors.userName}
                 />
+                <Form.Control.Feedback type="invalid">
+                  {validationErrors.userName}
+                </Form.Control.Feedback>
               </Form.Group>
             </Col>
             <Col md={6}>
@@ -102,7 +211,11 @@ const MemberForm = ({
                   onChange={(e) => handleChange('userEmail', e.target.value)}
                   required
                   placeholder="Enter email address"
+                  isInvalid={!!validationErrors.userEmail}
                 />
+                <Form.Control.Feedback type="invalid">
+                  {validationErrors.userEmail}
+                </Form.Control.Feedback>
               </Form.Group>
             </Col>
           </Row>
@@ -116,8 +229,13 @@ const MemberForm = ({
                   value={formData.userContact}
                   onChange={(e) => handleChange('userContact', e.target.value)}
                   required
-                  placeholder="Enter contact number"
+                  placeholder="Enter 10-digit contact number"
+                  maxLength={10}
+                  isInvalid={!!validationErrors.userContact}
                 />
+                <Form.Control.Feedback type="invalid">
+                  {validationErrors.userContact}
+                </Form.Control.Feedback>
               </Form.Group>
             </Col>
             <Col md={6}>
@@ -128,8 +246,12 @@ const MemberForm = ({
                   value={formData.userPassword}
                   onChange={(e) => handleChange('userPassword', e.target.value)}
                   required
-                  placeholder="Enter password"
+                  placeholder="Enter password (6-15 characters)"
+                  isInvalid={!!validationErrors.userPassword}
                 />
+                <Form.Control.Feedback type="invalid">
+                  {validationErrors.userPassword}
+                </Form.Control.Feedback>
               </Form.Group>
             </Col>
           </Row>
