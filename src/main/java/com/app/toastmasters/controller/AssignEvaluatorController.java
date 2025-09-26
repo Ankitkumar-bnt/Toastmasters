@@ -13,7 +13,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/meeting")
 @RequiredArgsConstructor
-public class AssignEvaluatorController {
+public class  AssignEvaluatorController {
 
     private final AssignEvaluatorService evaluatorService;
 
