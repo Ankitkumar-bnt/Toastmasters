@@ -3,9 +3,18 @@ import axios from 'axios';
 const API_BASE_URL = '/api/availableMembers';
 
 export const markAvailability = async (availability, userId, meetingId) => {
-	return axios.post(
-		`${API_BASE_URL}/markAvailability/${availability}/${userId}/${meetingId}`
-	);
+  const a = Number(availability);
+  const u = Number(userId);
+  const m = Number(meetingId);
+  return axios.post(
+    `${API_BASE_URL}/markAvailability/${a}/${u}/${m}`,
+    null,
+    {
+      headers: {
+        'Accept': 'application/json'
+      }
+    }
+  );
 };
 
 export const getAllMemberAvailability = async () => {

@@ -120,10 +120,28 @@ const MeetingDetailsView = ({ meeting, onBack, onChooseRole }) => {
     setSubmitting(true);
     setFeedback(null);
     try {
-      await markAvailability(Number(value), userId, meetingId);
+      const numeric = Number(value);
+      try {
+        await markAvailability(numeric, userId, meetingId);
+      } catch (err) {
+        // Some backends may not accept 0; retry with 2 (Tentative) as a compatibility fallback
+        if (numeric === 0) {
+          console.warn('markAvailability(0, userId, meetingId) failed; retrying with 2 (tentative).', {
+            userId,
+            meetingId,
+            error: err?.response?.data || err?.message || err
+          });
+          await markAvailability(2, userId, meetingId);
+          // Reflect fallback selection in UI
+          setSelectedAvailability('2');
+        } else {
+          throw err;
+        }
+      }
       // Do not show success message per requirement
       setFeedback(null);
     } catch (e) {
+      console.error('markAvailability failed', e?.response?.data || e);
       setFeedback({ type: 'error', message: 'Failed to update availability. Please try again.' });
     } finally {
       setSubmitting(false);

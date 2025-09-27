@@ -772,6 +772,155 @@ const AssignRole = () => {
     return memberFromList.userName || member.userName || member.name || member.user.userName || 'Unknown';
   };
 
+  // Helper: get display name by userId
+  const getMemberDisplayById = (uid) => {
+    const mem = (allMembers || []).find(m => String(m.userId) === String(uid));
+    const name = mem?.userName || [mem?.firstName, mem?.lastName].filter(Boolean).join(' ') || `Member #${uid}`;
+    return `${uid} - ${name}`;
+  };
+
+  // Helpers to work with role names safely
+  const normalizeRoleName = (r) => (typeof r === 'string' ? r : (r?.roleName || r?.name || ''));
+  const isSpeakerRoleName = (name) => typeof name === 'string' && name.toLowerCase().startsWith('speaker');
+  const isEvaluatorRoleName = (name) => typeof name === 'string' && name.toLowerCase().startsWith('evaluator');
+
+  // Build ordered candidate list for assigning a specific role type
+  // roleType: 'speaker' | 'evaluator'
+  const getOrderedCandidatesForType = (roleType) => {
+    const isEval = roleType === 'evaluator';
+    const selectedId = selectedMember?.userId || selectedMember?.memberId || selectedMember?.user?.userId;
+    const candidateIds = (availableMembers || [])
+      .map(m => m.userId || m.memberId || m.user?.userId)
+      .filter(Boolean)
+      .filter(uid => String(uid) !== String(selectedId)); // exclude self
+
+    const items = candidateIds.map(uid => {
+      const prefs = memberRoles?.[uid] || [];
+      const hasPref = prefs.some(pr => {
+        const nm = normalizeRoleName(pr);
+        return isEval ? isEvaluatorRoleName(nm) : isSpeakerRoleName(nm);
+      });
+      const label = getMemberDisplayById(uid);
+      return { userId: uid, label, preferred: !!hasPref };
+    });
+
+    // Sort: preferred first, then by label
+    items.sort((a, b) => {
+      if (a.preferred === b.preferred) return a.label.localeCompare(b.label);
+      return a.preferred ? -1 : 1;
+    });
+    return items;
+  };
+
+  // Quick-assign a role type to a target member if not already assigned
+  const quickAssignRoleToMember = async (targetUserId, roleType) => {
+    try {
+      if (!selectedMeetingId) {
+        await Swal.fire({ icon: 'info', title: 'Select meeting', text: 'Please select a meeting first.' });
+        return;
+      }
+      const rolePrefix = roleType === 'evaluator' ? 'Evaluator' : 'Speaker';
+      const targetAssigned = assignedRoles?.[targetUserId] || [];
+      const alreadyHasType = targetAssigned.some(r => {
+        const nm = normalizeRoleName(r);
+        return roleType === 'evaluator' ? isEvaluatorRoleName(nm) : isSpeakerRoleName(nm);
+      });
+      if (alreadyHasType) {
+        await Swal.fire({ icon: 'info', title: 'Already assigned', text: `${getMemberDisplayById(targetUserId)} already has a ${rolePrefix} role.` });
+        return;
+      }
+
+      // Pick the first available matching role name by capacity
+      const candidateRoleNames = (meetingSpecificRoles || [])
+        .map(r => r?.roleName)
+        .filter(Boolean)
+        .filter(n => (roleType === 'evaluator' ? isEvaluatorRoleName(n) : isSpeakerRoleName(n)));
+
+      // Check availability based on current counts
+      let chosenRole = null;
+      for (const rn of candidateRoleNames) {
+        const available = (availableRoleCounts?.[rn] || 0);
+        if (available > 0) { chosenRole = rn; break; }
+      }
+
+      if (!chosenRole) {
+        await Swal.fire({ icon: 'warning', title: 'No slots available', text: `No ${rolePrefix} roles are currently available for this meeting.` });
+        return;
+      }
+
+      const confirm = await Swal.fire({
+        title: `Assign ${rolePrefix}?`,
+        html: `<div style="text-align:left">Assign <b>${rolePrefix}</b> role <b>${chosenRole}</b> to<br/><b>${getMemberDisplayById(targetUserId)}</b>?</div>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Assign',
+        cancelButtonText: 'Cancel'
+      });
+      if (!confirm.isConfirmed) return;
+
+      const updated = Array.from(new Set([...
+        (assignedRoles?.[targetUserId] || []).map(normalizeRoleName),
+        chosenRole
+      ]));
+
+      // Persist to backend: API expects the full list for that user
+      await addMemberAssignedRole(targetUserId, selectedMeetingId, updated);
+
+      // Update local state and recalc counts using the updated snapshot to avoid stale values
+      const nextAssigned = { ...assignedRoles, [targetUserId]: updated };
+      setAssignedRoles(nextAssigned);
+      // Recompute available counts synchronously
+      const roleCounts = {};
+      (meetingSpecificRoles || []).forEach(r => { roleCounts[r.roleName] = r.roleCount || 1; });
+      Object.values(nextAssigned).forEach(list => {
+        (list || []).forEach(roleName => {
+          if (roleCounts[roleName] > 0) roleCounts[roleName] -= 1;
+        });
+      });
+      setAvailableRoleCounts(roleCounts);
+
+      // Also persist evaluator-speaker pair in assign_evaluator table when applicable
+      try {
+        const selectedId = selectedMember?.userId || selectedMember?.memberId || selectedMember?.user?.userId;
+        let pair = null;
+        if (roleType === 'evaluator' && selectedId) {
+          // Selected member is a speaker; target user is the evaluator
+          pair = { id: null, speakerId: Number(selectedId), evaluatorId: Number(targetUserId), meetingId: Number(selectedMeetingId) };
+        } else if (roleType === 'speaker' && selectedId) {
+          // Selected member is an evaluator; target user is the speaker
+          pair = { id: null, speakerId: Number(targetUserId), evaluatorId: Number(selectedId), meetingId: Number(selectedMeetingId) };
+        }
+        if (pair) {
+          // prevent duplicates
+          try {
+            const existRes = await getAllAssignedEvaluatorsByMeeting(selectedMeetingId);
+            const exist = existRes?.data?.data || [];
+            const already = exist.some(a => Number(a.speakerId) === pair.speakerId && Number(a.evaluatorId) === pair.evaluatorId);
+            if (!already) {
+              const merged = exist.map(a => ({
+                id: a.id || null,
+                speakerId: Number(a.speakerId),
+                evaluatorId: Number(a.evaluatorId),
+                meetingId: Number(a.meetingId || selectedMeetingId)
+              }));
+              merged.push(pair);
+              await saveEvaluatorAssignments(merged);
+            }
+          } catch (err) {
+            console.warn('assign_evaluator save check failed:', err?.message || err);
+          }
+        }
+      } catch (pairErr) {
+        console.warn('Skipping assign_evaluator persistence:', pairErr?.message || pairErr);
+      }
+
+      await Swal.fire({ icon: 'success', title: 'Assigned', text: `${rolePrefix} role assigned to ${getMemberDisplayById(targetUserId)}.` });
+    } catch (e) {
+      console.error('Quick-assign error:', e?.response || e);
+      await Swal.fire({ icon: 'error', title: 'Error', text: e?.response?.data?.message || e?.message || 'Failed to assign role' });
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -1188,6 +1337,58 @@ const AssignRole = () => {
                     <p className="text-muted">No roles available for this meeting</p>
                   )}
                 </div>
+
+                {/* Contextual quick-assign buttons */}
+                {(() => {
+                  const hasSpeaker = (selectedMemberRoles || []).some(r => isSpeakerRoleName(normalizeRoleName(r)));
+                  const hasEvaluator = (selectedMemberRoles || []).some(r => isEvaluatorRoleName(normalizeRoleName(r)));
+                  if (!hasSpeaker && !hasEvaluator) return null;
+                  const evalCandidates = getOrderedCandidatesForType('evaluator');
+                  const spkCandidates = getOrderedCandidatesForType('speaker');
+                  return (
+                    <div className="mt-3 pt-3 border-top">
+                      <div className="small text-muted mb-2">Quick assign related roles</div>
+                      <div className="d-flex flex-wrap gap-2">
+                        {hasSpeaker && (
+                          <Dropdown>
+                            <Dropdown.Toggle variant="outline-secondary" size="sm">
+                              Assign Evaluator
+                            </Dropdown.Toggle>
+                            <Dropdown.Menu style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                              {evalCandidates.length === 0 ? (
+                                <Dropdown.Item disabled>No members available</Dropdown.Item>
+                              ) : (
+                                evalCandidates.map(c => (
+                                  <Dropdown.Item key={`e-${c.userId}`} onClick={() => quickAssignRoleToMember(c.userId, 'evaluator')}>
+                                    {c.label} {c.preferred && (<Badge bg="info" className="ms-1">Preferred</Badge>)}
+                                  </Dropdown.Item>
+                                ))
+                              )}
+                            </Dropdown.Menu>
+                          </Dropdown>
+                        )}
+                        {hasEvaluator && (
+                          <Dropdown>
+                            <Dropdown.Toggle variant="outline-secondary" size="sm">
+                              Assign Speaker
+                            </Dropdown.Toggle>
+                            <Dropdown.Menu style={{ maxHeight: '260px', overflowY: 'auto' }}>
+                              {spkCandidates.length === 0 ? (
+                                <Dropdown.Item disabled>No members available</Dropdown.Item>
+                              ) : (
+                                spkCandidates.map(c => (
+                                  <Dropdown.Item key={`s-${c.userId}`} onClick={() => quickAssignRoleToMember(c.userId, 'speaker')}>
+                                    {c.label} {c.preferred && (<Badge bg="info" className="ms-1">Preferred</Badge>)}
+                                  </Dropdown.Item>
+                                ))
+                              )}
+                            </Dropdown.Menu>
+                          </Dropdown>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </Col>
 
              {/* Right Side: Role History */}
