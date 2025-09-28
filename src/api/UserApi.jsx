@@ -21,3 +21,11 @@ export const deleteUserById = async (userId) => {
 export const getUserById = async (userId) => {
   return await axios.get(`${API_URL}/getUserById/${userId}`);
 };
+
+export const getAllGuest = async () => {
+  return await axios.get(`${API_URL}/getAllGuest`);
+};
+
+export const addAvailabilityOfGuest = async (userId, meetingId) => {
+  return await axios.post(`${API_URL}/addAvailabilityOfGuest/${userId}/${meetingId}`);
+};

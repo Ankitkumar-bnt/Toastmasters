@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Button, Row, Col, Alert } from 'react-bootstrap';
+import { getAllMembers } from '../../../api/UserApi';
 
 const MemberForm = ({
   show,
@@ -17,11 +18,13 @@ const MemberForm = ({
     gender: '',
     dob: '',
     hobbies: '',
-    mentorId: ''
+    mentor: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [validationErrors, setValidationErrors] = useState({});
+  const [allMembers, setAllMembers] = useState([]);
+  const [membersLoading, setMembersLoading] = useState(false);
 
   // Validation functions
   const validateName = (name) => {
@@ -70,6 +73,103 @@ const MemberForm = ({
     return '';
   };
 
+  useEffect(() => {
+    if (editingUser) {
+      setFormData({
+        userId: editingUser.userId,
+        userName: editingUser.userName,
+        userEmail: editingUser.userEmail,
+        userContact: editingUser.userContact,
+        userPassword: editingUser.userPassword,
+        address: editingUser.address,
+        gender: editingUser.gender,
+        dob: editingUser.dob,
+        hobbies: editingUser.hobbies,
+        mentor: editingUser.mentor?.userId || editingUser.mentorId || ''
+      });
+    } else {
+      setFormData({
+        userName: '',
+        userEmail: '',
+        userContact: '',
+        userPassword: '',
+        address: '',
+        gender: '',
+        dob: '',
+        hobbies: '',
+        mentor: ''
+      });
+    }
+    setError('');
+    setValidationErrors({});
+  }, [editingUser, show]);
+
+  // Load members for mentor dropdown when modal opens
+  useEffect(() => {
+    const fetchMembers = async () => {
+      try {
+        setMembersLoading(true);
+        const res = await getAllMembers();
+        const list = res?.data?.data || res?.data || [];
+        const arr = Array.isArray(list) ? list : [];
+        const filtered = arr.filter((m) => Number(m.deleteStatus) === 1);
+        setAllMembers(filtered);
+      } catch (e) {
+        setAllMembers([]);
+      } finally {
+        setMembersLoading(false);
+      }
+    };
+    if (show) fetchMembers();
+  }, [show]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    // Validate form before submission
+    if (!validateForm()) {
+      setLoading(false);
+      setError('Please fix the validation errors before submitting.');
+      return;
+    }
+
+    try {
+      // Map mentor selection to mentorId integer for backend
+      const payload = { ...formData };
+      if (payload.mentor === '' || payload.mentor == null) {
+        delete payload.mentor;
+        delete payload.mentorId;
+      } else {
+        const mid = parseInt(payload.mentor, 10);
+        payload.mentorId = mid;
+        delete payload.mentor;
+      }
+
+      await onSubmit(payload);
+      onHide();
+    } catch (err) {
+      setError('Failed to save member. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (field, value) => {
+    // For contact field, only allow numbers
+    if (field === 'userContact') {
+      value = value.replace(/\D/g, '');
+    }
+    
+    setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // Real-time validation for key fields
+    if (['userName', 'userEmail', 'userContact', 'userPassword'].includes(field)) {
+      validateField(field, value);
+    }
+  };
+
   const validateField = (field, value) => {
     let error = '';
     switch (field) {
@@ -107,73 +207,6 @@ const MemberForm = ({
     setValidationErrors(errors);
     
     return Object.values(errors).every(error => error === '');
-  };
-
-  useEffect(() => {
-    if (editingUser) {
-      setFormData({
-        userId: editingUser.userId,
-        userName: editingUser.userName,
-        userEmail: editingUser.userEmail,
-        userContact: editingUser.userContact,
-        userPassword: editingUser.userPassword,
-        address: editingUser.address,
-        gender: editingUser.gender,
-        dob: editingUser.dob,
-        hobbies: editingUser.hobbies,
-        mentorId: editingUser.mentorId
-      });
-    } else {
-      setFormData({
-        userName: '',
-        userEmail: '',
-        userContact: '',
-        userPassword: '',
-        address: '',
-        gender: '',
-        dob: '',
-        hobbies: '',
-        mentorId: ''
-      });
-    }
-    setError('');
-    setValidationErrors({});
-  }, [editingUser, show]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    // Validate form before submission
-    if (!validateForm()) {
-      setLoading(false);
-      setError('Please fix the validation errors before submitting.');
-      return;
-    }
-
-    try {
-      await onSubmit(formData);
-      onHide();
-    } catch (err) {
-      setError('Failed to save member. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleChange = (field, value) => {
-    // For contact field, only allow numbers
-    if (field === 'userContact') {
-      value = value.replace(/\D/g, '');
-    }
-    
-    setFormData(prev => ({ ...prev, [field]: value }));
-    
-    // Real-time validation for key fields
-    if (['userName', 'userEmail', 'userContact', 'userPassword'].includes(field)) {
-      validateField(field, value);
-    }
   };
 
   return (
@@ -297,13 +330,21 @@ const MemberForm = ({
             </Col>
             <Col md={4}>
               <Form.Group className="mb-3">
-                <Form.Label>Mentor ID</Form.Label>
-                <Form.Control
-                  type="number"
-                  value={formData.mentorId}
-                  onChange={(e) => handleChange('mentorId', e.target.value)}
-                  placeholder="Enter mentor ID"
-                />
+                <Form.Label>Mentor</Form.Label>
+                <Form.Select
+                  value={String(formData.mentor || '')}
+                  onChange={(e) => handleChange('mentor', e.target.value)}
+                  disabled={membersLoading}
+                >
+                  <option value="">Select Mentor (optional)</option>
+                  {allMembers
+                    .filter((m) => (formData.userId ? Number(m.userId) !== Number(formData.userId) : true))
+                    .map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.userId} {m.userName}
+                    </option>
+                  ))}
+                </Form.Select>
               </Form.Group>
             </Col>
           </Row>

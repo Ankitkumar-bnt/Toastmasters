@@ -4,6 +4,7 @@ import Swal from 'sweetalert2';
 import { getAllMeetings, addMeeting, getMeetingByTheme, updateMeeting } from '../../api/MeetingApi';
 import { getAllRoles } from '../../api/RoleApi';
 import { getAllMeetingRoleByMeetingId, addMeetingRoles } from '../../api/MeetingRoleApi';
+import { getAllGuest, addAvailabilityOfGuest } from '../../api/UserApi';
 
 const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   const [formData, setFormData] = useState({
@@ -20,6 +21,57 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   const [availableRoles, setAvailableRoles] = useState([]);
   const [selectedRoles, setSelectedRoles] = useState({});
   const [roleLoading, setRoleLoading] = useState(false);
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [availableGuests, setAvailableGuests] = useState([]);
+  const [guestLoading, setGuestLoading] = useState(false);
+  const [selectedGuests, setSelectedGuests] = useState({}); // { [userId]: true }
+
+  // Helpers to normalize date/time formats coming from API/UI
+  const normalizeDate = (d) => {
+    if (!d) return '';
+    try {
+      const s = String(d);
+      if (s.includes('T')) return s.split('T')[0];
+      return s.slice(0, 10);
+    } catch {
+      return '';
+    }
+  };
+
+  const fetchGuests = async () => {
+    try {
+      setGuestLoading(true);
+      const response = await getAllGuest();
+      const guests = response?.data?.data || response?.data || [];
+      setAvailableGuests(Array.isArray(guests) ? guests : []);
+    } catch (error) {
+      console.error('Error fetching guests:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to fetch guests. Please try again.',
+      });
+    } finally {
+      setGuestLoading(false);
+    }
+  };
+
+  const normalizeTime = (t) => {
+    if (t == null) return '';
+    const s = String(t);
+    const raw = s.includes('T') ? s.split('T')[1] : s;
+    const [hh, mm] = raw.split(':');
+    if (!hh) return '';
+    const norm = `${String(hh).padStart(2, '0')}:${String(mm || '00').padStart(2, '0')}`;
+    return norm;
+  };
+
+  const timesEqual = (aStart, aEnd, bStart, bEnd) => {
+    return (
+      normalizeTime(aStart) === normalizeTime(bStart) &&
+      normalizeTime(aEnd) === normalizeTime(bEnd)
+    );
+  };
 
   const findNextAvailableSaturday = (startFrom, meetings) => {
     let checkDate = startFrom ? new Date(startFrom) : new Date();
@@ -137,6 +189,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
     } else {
       // Clear selected roles for new meetings
       setSelectedRoles({});
+      setSelectedGuests({});
     }
   }, [editingMeeting]);
 
@@ -175,6 +228,24 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
     }
 
     setShowRoleModal(true);
+  };
+
+  const handleAddGuests = async () => {
+    if (availableGuests.length === 0) {
+      await fetchGuests();
+    }
+    setShowGuestModal(true);
+  };
+
+  const handleGuestModalSave = () => {
+    setShowGuestModal(false);
+    Swal.fire({
+      icon: 'success',
+      title: 'Guests Added',
+      text: `${Object.keys(selectedGuests).length} guest(s) selected for this meeting.`,
+      timer: 2000,
+      showConfirmButton: false
+    });
   };
 
   const handleRoleSelection = (roleId, isSelected) => {
@@ -241,6 +312,63 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
       return;
     }
 
+    // Duplicate meeting checks (only for creating a new meeting)
+    if (!editingMeeting) {
+      const targetDate = normalizeDate(formData.meetingDate);
+      const targetStart = normalizeTime(formData.startTime);
+      const targetEnd = normalizeTime(formData.endTime);
+
+      // Use already loaded meetings; if empty, try to fetch quickly
+      let meetingsForCheck = existingMeetings;
+      if (!meetingsForCheck || meetingsForCheck.length === 0) {
+        try {
+          const resp = await getAllMeetings();
+          const data = resp?.data?.data || resp?.data || [];
+          meetingsForCheck = Array.isArray(data) ? data : [];
+        } catch (e) {
+          // Ignore fetch error; proceed without duplicate check
+        }
+      }
+
+      const sameDateMeetings = (meetingsForCheck || []).filter(
+        (m) => normalizeDate(m?.meetingDate) === targetDate
+      );
+
+      // Exact same date & time should be blocked
+      const exactConflict = sameDateMeetings.find((m) =>
+        timesEqual(m?.startTime, m?.endTime, targetStart, targetEnd)
+      );
+      if (exactConflict) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Duplicate Meeting',
+          text: 'A meeting already exists on this date with the same time. Please choose a different time.',
+        });
+        return;
+      }
+
+      // Same date but different time: warn and ask for confirmation
+      if (sameDateMeetings.length > 0) {
+        const existingTimeRanges = sameDateMeetings
+          .map((m) => `${normalizeTime(m?.startTime)} - ${normalizeTime(m?.endTime)}`)
+          .join(', ');
+
+        const res = await Swal.fire({
+          icon: 'warning',
+          title: 'Meeting already scheduled on this date',
+          html: `Existing time(s): <b>${existingTimeRanges}</b>.<br/>Do you still want to create another meeting on the same date?`,
+          showCancelButton: true,
+          confirmButtonText: 'Yes, create',
+          cancelButtonText: 'No',
+          reverseButtons: true,
+        });
+
+        if (!res.isConfirmed) {
+          return;
+        }
+      }
+    }
+
     try {
       setLoading(true);
 
@@ -271,10 +399,22 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
           await addMeetingRoles(editingMeeting.meetingId, rolesMap);
         }
         
+        // Optionally add guest availability when editing
+        if (Object.keys(selectedGuests).length > 0) {
+          try {
+            const ids = Object.keys(selectedGuests).map(id => parseInt(id, 10)).filter(Number.isFinite);
+            for (const uid of ids) {
+              await addAvailabilityOfGuest(uid, editingMeeting.meetingId);
+            }
+          } catch (e) {
+            console.warn('Failed to add guest availability (edit mode):', e);
+          }
+        }
+
         Swal.fire({
           icon: 'success',
           title: 'Success!',
-          text: 'Meeting and roles updated successfully.',
+          text: 'Meeting, roles and guest availability updated successfully.',
           timer: 2000,
           showConfirmButton: false,
         });
@@ -378,11 +518,24 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
           console.log('Roles map (roleName → count):', rolesMap);
           await addMeetingRoles(newMeetingId, rolesMap);
         }
+
+        // Step 5: Add guest availability for selected guests
+        if (Object.keys(selectedGuests).length > 0) {
+          console.log('Step 5: Adding guest availability...');
+          const ids = Object.keys(selectedGuests).map(id => parseInt(id, 10)).filter(Number.isFinite);
+          for (const uid of ids) {
+            try {
+              await addAvailabilityOfGuest(uid, newMeetingId);
+            } catch (e) {
+              console.warn('Failed to add availability for guest', uid, e);
+            }
+          }
+        }
         
         Swal.fire({
           icon: 'success',
           title: 'Success!',
-          text: 'Meeting and roles added successfully.',
+          text: 'Meeting, roles and guest availability added successfully.',
           timer: 2000,
           showConfirmButton: false,
         });
@@ -507,7 +660,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
                 )}
               </Form.Group>
             </Col>
-            <Col md={4} className="text-end">
+            <Col md={3} className="text-end">
               <Button
                 variant="info"
                 onClick={handleAddRoles}
@@ -515,6 +668,16 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
                 className="mb-3"
               >
                 Add Roles ({Object.keys(selectedRoles).length})
+              </Button>
+            </Col>
+            <Col md={3} className="text-end">
+              <Button
+                variant="secondary"
+                onClick={handleAddGuests}
+                disabled={loading}
+                className="mb-3"
+              >
+                Add Guests ({Object.keys(selectedGuests).length})
               </Button>
             </Col>
           </Row>
@@ -634,6 +797,89 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
                 disabled={Object.keys(selectedRoles).length === 0}
               >
                 Save Roles
+              </Button>
+            </div>
+          </div>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Guest Selection Modal */}
+      <Modal
+        show={showGuestModal}
+        onHide={() => setShowGuestModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Add Guests to Meeting</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {guestLoading ? (
+            <div className="text-center py-4">
+              <div className="spinner-border" role="status">
+                <span className="visually-hidden">Loading guests...</span>
+              </div>
+              <p className="mt-2">Loading guests...</p>
+            </div>
+          ) : (
+            <>
+              {availableGuests.length > 0 ? (
+                <Table striped bordered hover>
+                  <thead>
+                    <tr>
+                      <th width="50">Select</th>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Contact</th>
+                      <th>Gender</th>
+                      <th>DOB</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {availableGuests.map((g) => (
+                      <tr key={g.userId}>
+                        <td className="text-center">
+                          <Form.Check
+                            type="checkbox"
+                            checked={!!selectedGuests[g.userId]}
+                            onChange={(e) => handleGuestSelection(g.userId, e.target.checked)}
+                          />
+                        </td>
+                        <td>{g.userName}</td>
+                        <td>{g.userEmail}</td>
+                        <td>{g.userContact}</td>
+                        <td>{g.gender}</td>
+                        <td>{g.dob ? new Date(g.dob).toLocaleDateString() : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-muted">No guests found.</p>
+                </div>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <div className="d-flex justify-content-between w-100">
+            <div className="text-muted">
+              {Object.keys(selectedGuests).length} guest(s) selected
+            </div>
+            <div>
+              <Button
+                variant="secondary"
+                onClick={() => setShowGuestModal(false)}
+                className="me-2"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleGuestModalSave}
+                disabled={Object.keys(selectedGuests).length === 0}
+              >
+                Save Guests
               </Button>
             </div>
           </div>

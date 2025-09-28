@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Button } from 'react-bootstrap';
 import Swal from 'sweetalert2';
-import { getAllMembers, addMember, updateMember, deleteUserById } from './api/UserApi';
+import { getAllMembers, addMember, updateMember, deleteUserById, getAllGuest } from './api/UserApi';
 import { getAllMeetings, addMeeting, updateMeeting, deleteMeeting } from './api/MeetingApi';
 import { addMeetingRoles } from './api/MeetingRoleApi';
 import AdminHeader from './components/admin/AdminHeader';
 import AdminSidebar from './components/admin/AdminSidebar';
 import MemberForm from './components/admin/members/MemberForm';
+import GuestForm from './components/admin/members/GuestForm';
 import MembersList from './components/admin/members/MembersList';
 import MeetingForm from './components/meetings/MeetingForm';
 import MeetingsList from './components/meetings/MeetingsList';
@@ -32,8 +33,11 @@ function App({ onLogout }) {
   const [meetingsLoading, setMeetingsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [showMemberForm, setShowMemberForm] = useState(false);
+  const [showGuestForm, setShowGuestForm] = useState(false);
+  const [showGuestsModal, setShowGuestsModal] = useState(false);
   const [showMeetingForm, setShowMeetingForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
+  const [editingGuest, setEditingGuest] = useState(null);
   const [editingMeeting, setEditingMeeting] = useState(null);
   const [editingAgendaMeetingId, setEditingAgendaMeetingId] = useState(null);
   const [selectedAgendaMeetingId, setSelectedAgendaMeetingId] = useState(null);
@@ -41,6 +45,8 @@ function App({ onLogout }) {
   const [showBackoutsModal, setShowBackoutsModal] = useState(false);
   const [backouts, setBackouts] = useState([]);
   const [memberNameById, setMemberNameById] = useState({});
+  const [guests, setGuests] = useState([]);
+  const [guestsLoading, setGuestsLoading] = useState(false);
 
   // Update activeTab based on current route (keep dashboard default on "/")
   useEffect(() => {
@@ -137,6 +143,29 @@ function App({ onLogout }) {
     setShowMemberForm(true);
   };
 
+  const handleAddGuest = () => {
+    setEditingGuest(null);
+    setShowGuestForm(true);
+  };
+
+  const handleViewGuests = async () => {
+    setShowGuestsModal(true);
+    await loadGuests();
+  };
+
+  const loadGuests = async () => {
+    try {
+      setGuestsLoading(true);
+      const res = await getAllGuest();
+      const list = res?.data?.data || res?.data || [];
+      setGuests(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setGuests([]);
+    } finally {
+      setGuestsLoading(false);
+    }
+  };
+
   const handleEditMember = (user) => {
     setEditingUser(user);
     setShowMemberForm(true);
@@ -166,6 +195,35 @@ function App({ onLogout }) {
       loadUsers();
     } catch (err) {
       throw err; // Let the form handle the error
+    }
+  };
+
+  const handleSubmitGuest = async (guestData) => {
+    try {
+      if (editingGuest) {
+        await updateMember({ ...guestData, userId: editingGuest.userId });
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Guest updated successfully.',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      } else {
+        await addMember(guestData);
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Guest added successfully.',
+          timer: 2000,
+          showConfirmButton: false,
+        });
+      }
+      setEditingGuest(null);
+      await loadUsers();
+      if (showGuestsModal) await loadGuests();
+    } catch (err) {
+      throw err;
     }
   };
 
@@ -374,10 +432,15 @@ function App({ onLogout }) {
           <UserPlus size={64} className="text-primary mb-4" />
           <h4>Ready to Add a New Member?</h4>
           <p className="text-muted mb-4">Click the button below to open the member registration form</p>
-          <Button variant="primary" size="lg" onClick={handleAddMember}>
-            <UserPlus size={20} className="me-2" />
-            Open Registration Form
-          </Button>
+          <div className="d-flex justify-content-center gap-2">
+            <Button variant="primary" size="lg" onClick={handleAddMember}>
+              <UserPlus size={20} className="me-2" />
+              Open Registration Form
+            </Button>
+            <Button variant="outline-primary" size="lg" onClick={handleAddGuest}>
+              Add Guest
+            </Button>
+          </div>
         </Card.Body>
       </Card>
     </div>
@@ -396,6 +459,7 @@ function App({ onLogout }) {
         onEdit={handleEditMember}
         onDelete={handleDeleteMember}
         onAdd={handleAddMember}
+        onViewGuests={handleViewGuests}
       />
     </div>
   );
@@ -516,6 +580,14 @@ function App({ onLogout }) {
           title={editingUser ? 'Edit Member' : 'Add New Member'}
         />
 
+        <GuestForm
+          show={showGuestForm}
+          onHide={() => setShowGuestForm(false)}
+          onSubmit={handleSubmitGuest}
+          title={editingGuest ? 'Edit Guest' : 'Add Guest'}
+          editingGuest={editingGuest}
+        />
+
         <MeetingForm
           show={showMeetingForm}
           onHide={() => setShowMeetingForm(false)}
@@ -560,6 +632,98 @@ function App({ onLogout }) {
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowBackoutsModal(false)}>Close</Button>
           </Modal.Footer>
+        </Modal>
+
+        <Modal show={showGuestsModal} onHide={() => setShowGuestsModal(false)} centered size="lg">
+          <Modal.Header closeButton>
+            <Modal.Title>Guests</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            {guestsLoading ? (
+              <div className="text-center py-4 text-muted">Loading guests...</div>
+            ) : guests.length === 0 ? (
+              <div className="text-center py-4 text-muted">No guests found.</div>
+            ) : (
+              <div className="table-responsive">
+                <Table striped hover size="sm" className="mb-0">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Name</th>
+                      <th>Email</th>
+                      <th>Contact</th>
+                      <th>Gender</th>
+                      <th>DOB</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {guests.map((g, idx) => (
+                      <tr key={g.userId}>
+                        <td>{idx + 1}</td>
+                        <td>{g.userName}</td>
+                        <td>{g.userEmail}</td>
+                        <td>{g.userContact}</td>
+                        <td>{g.gender}</td>
+                        <td>{g.dob ? new Date(g.dob).toLocaleDateString() : '-'}</td>
+                        <td>
+                          <div className="d-flex gap-2">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={() => {
+                                setEditingGuest(g);
+                                setShowGuestForm(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={async () => {
+                                const result = await Swal.fire({
+                                  title: 'Are you sure?',
+                                  text: "You won't be able to revert this action!",
+                                  icon: 'warning',
+                                  showCancelButton: true,
+                                  confirmButtonColor: '#dc3545',
+                                  cancelButtonColor: '#6c757d',
+                                  confirmButtonText: 'Yes, delete it!'
+                                });
+                                if (result.isConfirmed) {
+                                  try {
+                                    await deleteUserById(g.userId);
+                                    await loadGuests();
+                                    await loadUsers();
+                                    Swal.fire({
+                                      icon: 'success',
+                                      title: 'Deleted!',
+                                      text: 'Guest has been deleted successfully.',
+                                      timer: 2000,
+                                      showConfirmButton: false,
+                                    });
+                                  } catch (err) {
+                                    Swal.fire({
+                                      icon: 'error',
+                                      title: 'Error',
+                                      text: 'Failed to delete guest. Please try again.'
+                                    });
+                                  }
+                                }
+                              }}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+            )}
+          </Modal.Body>
         </Modal>
       </>
     );

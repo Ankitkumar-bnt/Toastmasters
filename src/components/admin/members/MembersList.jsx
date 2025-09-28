@@ -7,7 +7,8 @@ const MembersList = ({
   loading,
   onEdit,
   onDelete,
-  onAdd
+  onAdd,
+  onViewGuests
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -45,10 +46,15 @@ const MembersList = ({
       <Card.Header className="bg-white">
         <div className="d-flex justify-content-between align-items-center">
           <h5 className="mb-0">Members Management</h5>
-          <Button variant="primary" onClick={onAdd}>
-            <UserPlus size={18} className="me-2" />
-            Add New Member
-          </Button>
+          <div className="d-flex gap-2">
+            <Button variant="outline-primary" onClick={onViewGuests}>
+              View Guests
+            </Button>
+            <Button variant="primary" onClick={onAdd}>
+              <UserPlus size={18} className="me-2" />
+              Add New Member
+            </Button>
+          </div>
         </div>
       </Card.Header>
       <Card.Body>
@@ -73,7 +79,6 @@ const MembersList = ({
           <div className="text-center py-5">
             <Eye size={48} className="text-muted mb-3" />
             <h6 className="text-muted">No members found</h6>
-            <p className="text-muted">Try adjusting your search criteria or add a new member.</p>
           </div>
         ) : (
           <>
@@ -87,7 +92,7 @@ const MembersList = ({
                     <th>Contact</th>
                     <th>Gender</th>
                     <th>Date of Birth</th>
-                    <th>Mentor ID</th>
+                    <th>Mentor</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -110,11 +115,13 @@ const MembersList = ({
                       <td>{getGenderBadge(user.gender)}</td>
                       <td>{new Date(user.dob).toLocaleDateString()}</td>
                       <td>
-                        {user.mentorId ? (
-                          <Badge bg="outline-primary text-dark">#{user.mentorId}</Badge>
-                        ) : (
-                          <span className="text-muted">-</span>
-                        )}
+                        {(() => {
+                          const id = user.mentor?.userId || user.mentorId;
+                          const name = user.mentor?.userName || users.find((u) => Number(u.userId) === Number(id))?.userName;
+                          if (name) return <span>{name}</span>;
+                          if (id) return <Badge bg="outline-primary text-dark">#{id}</Badge>;
+                          return <span className="text-muted">-</span>;
+                        })()}
                       </td>
                       <td>
                         <div className="d-flex gap-2">

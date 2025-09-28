@@ -14,7 +14,7 @@ function AdminHomePage() {
     gender: "",
     dob: "",
     hobbies: "",
-    mentorId: ""
+    mentor: "" // store selected mentor's userId
   });
 
   useEffect(() => {
@@ -36,7 +36,18 @@ function AdminHomePage() {
   const handleAddUser = async (e) => {
     e.preventDefault();
     try {
-      await addMember(newUser);
+      // Map mentor selection to mentorId integer expected by backend
+      const payload = { ...newUser };
+      if (payload.mentor === "" || payload.mentor == null) {
+        delete payload.mentor;
+        delete payload.mentorId;
+      } else {
+        const mid = parseInt(payload.mentor, 10);
+        payload.mentorId = mid;
+        delete payload.mentor;
+      }
+
+      await addMember(payload);
       setNewUser({
         userName: "",
         userEmail: "",
@@ -46,7 +57,7 @@ function AdminHomePage() {
         gender: "",
         dob: "",
         hobbies: "",
-        mentorId: ""
+        mentor: ""
       });
       loadUsers();
     } catch (err) {
@@ -142,11 +153,23 @@ function AdminHomePage() {
           onChange={(e) => setNewUser({ ...newUser, hobbies: e.target.value })}
         />
         <input
-          type="number"
-          placeholder="Mentor ID"
-          value={newUser.mentorId}
-          onChange={(e) => setNewUser({ ...newUser, mentorId: e.target.value })}
+          type="text"
+          placeholder="Mentor (select below)"
+          value={users.find((m) => Number(m.userId) === Number(newUser.mentor))?.userName || ""}
+          readOnly
+          style={{ backgroundColor: '#f8f9fa' }}
         />
+        <select
+          value={newUser.mentor}
+          onChange={(e) => setNewUser({ ...newUser, mentor: e.target.value })}
+        >
+          <option value="">Select Mentor (optional)</option>
+          {users.map((m) => (
+            <option key={m.userId} value={m.userId}>
+              {m.userId} {m.userName}
+            </option>
+          ))}
+        </select>
         <button type="submit">Add Member</button>
       </form>
 
@@ -158,6 +181,15 @@ function AdminHomePage() {
           {users.map((u) => (
             <li key={u.userId}>
               {u.userName} ({u.userEmail})
+              {" "}
+              <span style={{ color: '#6c757d' }}>
+                • Mentor: {
+                  // Prefer name from nested mentor object; fallback to lookup by id
+                  u.mentor?.userName ||
+                  users.find((m) => Number(m.userId) === Number(u.mentor?.userId || u.mentorId))?.userName ||
+                  (u.mentor?.userId || u.mentorId ? `ID ${u.mentor?.userId || u.mentorId}` : 'None')
+                }
+              </span>
               <button onClick={() => handleUpdate(u)}>Update</button>
               <button onClick={() => handleDelete(u.userId)}>Delete</button>
             </li>
