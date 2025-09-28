@@ -6,9 +6,9 @@ import { getAllMeetings, getAllUpcomingMeetings } from '../../api/MeetingApi';
 import { getAllMemberAvailability } from '../../api/AvailableMembersApi';
 import { getAllMembers } from '../../api/UserApi';
 import { getMemberPreferredRoles, addMemberPreferredRole } from '../../api/PreferredRoleApi';
-import { getMemberAssignedRole, addMemberAssignedRole } from '../../api/AssignedRoleApi';
+import { getMemberAssignedRole, addMemberAssignedRole, deleteMemberAssignedRole } from '../../api/AssignedRoleApi';
 import { getAllMemberAssignedRolesByMeeting } from '../../api/AssignedRoleApi';
-import { assignEvaluators as saveEvaluatorAssignments, getAllAssignedEvaluatorsByMeeting } from '../../api/AssignEvaluatorApi';
+import { assignEvaluators as saveEvaluatorAssignments, getAllAssignedEvaluatorsByMeeting, deleteAssignedEvaluatorById as deleteEvaluatorAssignment } from '../../api/AssignEvaluatorApi';
 import { getAllRoles, addRole, updateRole, deleteRole } from '../../api/RoleApi';
 import { getAllMeetingRoleCombineByMeeting } from '../../api/MeetingRoleApi';
 import { getLast3MeetingRoles } from '../../api/MeetingRoleApi'; // Fixed import
@@ -25,9 +25,9 @@ const AssignRole = () => {
   const [meetingSpecificRoles, setMeetingSpecificRoles] = useState([]);
   const [availableRoleCounts, setAvailableRoleCounts] = useState({});
   const [roleHistory, setRoleHistory] = useState([]); // Add state for role history
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   
   // Role management states
   const [showRoleModal, setShowRoleModal] = useState(false);
@@ -38,6 +38,7 @@ const AssignRole = () => {
   const [currentRolePage, setCurrentRolePage] = useState(1);
   const ROLES_PER_PAGE = 6; // Set constant for roles per page
   const [totalRolePages, setTotalRolePages] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [isLoadingRoles, setIsLoadingRoles] = useState(false);
   
   // Role assignment modal state
@@ -57,6 +58,7 @@ const AssignRole = () => {
   const [pairs, setPairs] = useState([]); // [{ id?, speakerId, speakerName, evaluatorId, evaluatorName, meetingId }]
   const [loadingEvaluatorData, setLoadingEvaluatorData] = useState(false);
   const [initialPairsSnapshot, setInitialPairsSnapshot] = useState(''); // JSON snapshot to detect unsaved changes
+  const [autoUnpairOnRemoval, setAutoUnpairOnRemoval] = useState(true);
 
   const openAssignEvaluatorModal = async () => {
     if (!selectedMeetingId) return;
@@ -134,6 +136,36 @@ const AssignRole = () => {
       setLoadingEvaluatorData(false);
     }
   };
+
+  // Helper to refresh evaluator-speaker pairs for a meeting and update UI
+  const refreshPairsForMeeting = async (meetingId) => {
+    if (!meetingId) return;
+    try {
+      const existingRes = await getAllAssignedEvaluatorsByMeeting(meetingId);
+      const existing = existingRes?.data?.data || [];
+      const mapped = existing.map(a => ({
+        id: a.id,
+        meetingId: Number(a.meetingId || meetingId),
+        speakerId: Number(a.speakerId),
+        evaluatorId: Number(a.evaluatorId),
+        speakerName: getMemberDisplayById(a.speakerId),
+        evaluatorName: getMemberDisplayById(a.evaluatorId)
+      }));
+      setPairs(mapped);
+    } catch (e) {
+      console.warn('Failed to refresh pairs for meeting', meetingId, e?.message || e);
+    }
+  };
+
+  // Keep pairs loaded for the selected meeting so the table can show relationships
+  useEffect(() => {
+    if (selectedMeetingId) {
+      refreshPairsForMeeting(selectedMeetingId);
+    } else {
+      setPairs([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMeetingId]);
 
   const addPair = async () => {
     console.log('addPair called with:', { selectedSpeakerId, selectedEvaluatorId });
@@ -725,9 +757,21 @@ const AssignRole = () => {
         [userId]: [...selectedMemberRoles]
       }));
 
-      // Update API - send all selected roles at once
+      // Update API for roles
+      // 1) Add/update current selections
       if (selectedMemberRoles.length > 0) {
         await addMemberAssignedRole(userId, selectedMeetingId, selectedMemberRoles);
+      }
+      // 2) Explicitly delete removed roles to keep backend in sync
+      try {
+        const prevNorm = (previousRoles || []).map(r => normalizeRoleName(r)).filter(Boolean);
+        const nowNorm = (selectedMemberRoles || []).map(r => normalizeRoleName(r)).filter(Boolean);
+        const removed = prevNorm.filter(r => !nowNorm.includes(r));
+        if (removed.length > 0) {
+          await deleteMemberAssignedRole(userId, selectedMeetingId, removed);
+        }
+      } catch (delErr) {
+        console.warn('Failed to delete removed roles (non-fatal):', delErr?.message || delErr);
       }
       
       // Recalculate available role counts after assignment
@@ -756,6 +800,75 @@ const AssignRole = () => {
       
       setAvailableRoleCounts(roleCounts);
       
+      // ==== Auto pair/unpair evaluator-speaker relationships on Save ====
+      const hadSpeakerBefore = (previousRoles || []).some(r => isSpeakerRoleName(normalizeRoleName(r)));
+      const hadEvaluatorBefore = (previousRoles || []).some(r => isEvaluatorRoleName(normalizeRoleName(r)));
+      const hasSpeakerNow = (selectedMemberRoles || []).some(r => isSpeakerRoleName(normalizeRoleName(r)));
+      const hasEvaluatorNow = (selectedMemberRoles || []).some(r => isEvaluatorRoleName(normalizeRoleName(r)));
+
+      try {
+        // Fetch existing meeting pairs
+        const existRes = await getAllAssignedEvaluatorsByMeeting(selectedMeetingId);
+        const exist = existRes?.data?.data || [];
+
+        // Normalize helper
+        const normalizePairs = (arr) => (arr || []).map(a => ({
+          id: a.id || null,
+          speakerId: Number(a.speakerId),
+          evaluatorId: Number(a.evaluatorId),
+          meetingId: Number(a.meetingId || selectedMeetingId)
+        }));
+
+        let finalPairs = normalizePairs(exist);
+        let toDelete = [];
+
+        // Auto-unpair if the user no longer has the respective role (respect toggle)
+        if (autoUnpairOnRemoval && !hasSpeakerNow) {
+          const removedAsSpeaker = finalPairs.filter(p => Number(p.speakerId) === Number(userId));
+          if (removedAsSpeaker.length > 0) {
+            toDelete.push(...removedAsSpeaker);
+            finalPairs = finalPairs.filter(p => Number(p.speakerId) !== Number(userId));
+          }
+        }
+        if (autoUnpairOnRemoval && !hasEvaluatorNow) {
+          const removedAsEvaluator = finalPairs.filter(p => Number(p.evaluatorId) === Number(userId));
+          if (removedAsEvaluator.length > 0) {
+            toDelete.push(...removedAsEvaluator);
+            finalPairs = finalPairs.filter(p => Number(p.evaluatorId) !== Number(userId));
+          }
+        }
+
+        // Note: Auto-creation of evaluator-speaker pairs is disabled. Admin must assign pairs explicitly.
+
+        if (toDelete.length > 0) {
+          // Optimistically update UI first
+          try {
+            const displayMapped = finalPairs.map(a => ({
+              id: a.id || null,
+              meetingId: Number(a.meetingId || selectedMeetingId),
+              speakerId: Number(a.speakerId),
+              evaluatorId: Number(a.evaluatorId),
+              speakerName: getMemberDisplayById(a.speakerId),
+              evaluatorName: getMemberDisplayById(a.evaluatorId)
+            }));
+            setPairs(displayMapped);
+          } catch {}
+
+          // Call targeted delete API for each removed pair
+          try {
+            await Promise.all(toDelete.map(p => (
+              deleteEvaluatorAssignment(Number(p.evaluatorId), Number(selectedMeetingId), Number(p.speakerId))
+            )));
+          } catch (delPairErr) {
+            console.warn('Failed to delete some evaluator assignments:', delPairErr?.message || delPairErr);
+          }
+
+          await refreshPairsForMeeting(selectedMeetingId);
+        }
+      } catch (pairErr) {
+        console.warn('Auto pair/unpair on save skipped:', pairErr?.message || pairErr);
+      }
+
       setSuccess('Roles updated successfully');
       setTimeout(() => setSuccess(''), 3000);
       setShowAssignRoleModal(false);
@@ -777,6 +890,22 @@ const AssignRole = () => {
     const mem = (allMembers || []).find(m => String(m.userId) === String(uid));
     const name = mem?.userName || [mem?.firstName, mem?.lastName].filter(Boolean).join(' ') || `Member #${uid}`;
     return `${uid} - ${name}`;
+  };
+
+  // Helper: get just the member name by userId
+  const getMemberNameById = (uid) => {
+    const mem = (allMembers || []).find(m => String(m.userId) === String(uid));
+    return mem?.userName || [mem?.firstName, mem?.lastName].filter(Boolean).join(' ') || `Member #${uid}`;
+  };
+
+  // Helpers: check if a user currently holds a speaker/evaluator role
+  const hasSpeakerRoleFor = (uid) => {
+    const roles = assignedRoles?.[uid] || [];
+    return roles.some(r => isSpeakerRoleName(normalizeRoleName(r)));
+  };
+  const hasEvaluatorRoleFor = (uid) => {
+    const roles = assignedRoles?.[uid] || [];
+    return roles.some(r => isEvaluatorRoleName(normalizeRoleName(r)));
   };
 
   // Helpers to work with role names safely
@@ -812,25 +941,168 @@ const AssignRole = () => {
     return items;
   };
 
-  // Quick-assign a role type to a target member if not already assigned
+  // Quick-assign a role type to a target member
   const quickAssignRoleToMember = async (targetUserId, roleType) => {
     try {
       if (!selectedMeetingId) {
         await Swal.fire({ icon: 'info', title: 'Select meeting', text: 'Please select a meeting first.' });
         return;
       }
+      if (!selectedMember) {
+        await Swal.fire({ icon: 'info', title: 'Select member', text: 'Please select a member to create a pairing.' });
+        return;
+      }
+      
       const rolePrefix = roleType === 'evaluator' ? 'Evaluator' : 'Speaker';
       const targetAssigned = assignedRoles?.[targetUserId] || [];
-      const alreadyHasType = targetAssigned.some(r => {
-        const nm = normalizeRoleName(r);
-        return roleType === 'evaluator' ? isEvaluatorRoleName(nm) : isSpeakerRoleName(nm);
-      });
-      if (alreadyHasType) {
-        await Swal.fire({ icon: 'info', title: 'Already assigned', text: `${getMemberDisplayById(targetUserId)} already has a ${rolePrefix} role.` });
+      
+      // For evaluator-speaker pairing, we don't need to check if they already have the role type
+      // as we want to allow multiple assignments (e.g., one evaluator can evaluate multiple speakers)
+      if (roleType !== 'evaluator' && roleType !== 'speaker') {
+        const alreadyHasType = targetAssigned.some(r => {
+          const nm = normalizeRoleName(r);
+          return roleType === 'evaluator' ? isEvaluatorRoleName(nm) : isSpeakerRoleName(nm);
+        });
+        
+        if (alreadyHasType) {
+          await Swal.fire({ 
+            icon: 'info', 
+            title: 'Already assigned', 
+            text: `${getMemberDisplayById(targetUserId)} already has a ${rolePrefix} role.` 
+          });
+          return;
+        }
+      }
+
+      // For evaluator-speaker pairing, handle the assignment directly
+      if (roleType === 'evaluator' || roleType === 'speaker') {
+        const selectedId = selectedMember?.userId || selectedMember?.memberId || selectedMember?.user?.userId;
+        // Correct mapping:
+        // - When assigning an evaluator, the selected member is the speaker, and targetUserId is the evaluator
+        // - When assigning a speaker, the selected member is the evaluator, and targetUserId is the speaker
+        const speakerId = roleType === 'evaluator' ? selectedId : targetUserId;
+        const evaluatorId = roleType === 'evaluator' ? targetUserId : selectedId;
+
+        // Ensure the target user has the necessary role; if not, assign one available slot
+        let roleAdded = null;
+        if (roleType === 'evaluator') {
+          let needsEval = !hasEvaluatorRoleFor(evaluatorId);
+          let existingEvalRoles = [];
+          if (needsEval) {
+            try {
+              const res = await getMemberAssignedRole(evaluatorId, selectedMeetingId);
+              const fetched = res?.data || [];
+              existingEvalRoles = fetched.map(r => normalizeRoleName(r)).filter(Boolean);
+              needsEval = !existingEvalRoles.some(n => isEvaluatorRoleName(n));
+            } catch (e) { /* fallback to state */ }
+          }
+          if (needsEval) {
+            const candidateRoleNames = (meetingSpecificRoles || [])
+              .map(r => r?.roleName)
+              .filter(Boolean)
+              .filter(n => isEvaluatorRoleName(n));
+            let chosenRole = null;
+            for (const rn of candidateRoleNames) {
+              const available = (availableRoleCounts?.[rn] || 0);
+              if (available > 0) { chosenRole = rn; break; }
+            }
+            if (!chosenRole) {
+              await Swal.fire({ icon: 'warning', title: 'No Evaluator slots', text: `${getMemberDisplayById(evaluatorId)} cannot be assigned as Evaluator because no slots are available.` });
+              return;
+            }
+            // Build full updated list for evaluator and persist
+            const baseList = existingEvalRoles.length > 0 ? existingEvalRoles : ((assignedRoles?.[evaluatorId] || []).map(normalizeRoleName));
+            const updated = Array.from(new Set([...baseList, chosenRole]));
+            await addMemberAssignedRole(evaluatorId, selectedMeetingId, updated);
+            // Update local state and counts optimistically
+            setAssignedRoles(prev => ({ ...prev, [evaluatorId]: updated }));
+            setAvailableRoleCounts(prev => ({ ...prev, [chosenRole]: Math.max(0, (prev?.[chosenRole] || 0) - 1) }));
+            roleAdded = chosenRole;
+          }
+        } else {
+          let needsSpeaker = !hasSpeakerRoleFor(speakerId);
+          let existingSpeakerRoles = [];
+          if (needsSpeaker) {
+            try {
+              const res = await getMemberAssignedRole(speakerId, selectedMeetingId);
+              const fetched = res?.data || [];
+              existingSpeakerRoles = fetched.map(r => normalizeRoleName(r)).filter(Boolean);
+              needsSpeaker = !existingSpeakerRoles.some(n => isSpeakerRoleName(n));
+            } catch (e) { /* fallback to state */ }
+          }
+          if (needsSpeaker) {
+            const candidateRoleNames = (meetingSpecificRoles || [])
+              .map(r => r?.roleName)
+              .filter(Boolean)
+              .filter(n => isSpeakerRoleName(n));
+            let chosenRole = null;
+            for (const rn of candidateRoleNames) {
+              const available = (availableRoleCounts?.[rn] || 0);
+              if (available > 0) { chosenRole = rn; break; }
+            }
+            if (!chosenRole) {
+              await Swal.fire({ icon: 'warning', title: 'No Speaker slots', text: `${getMemberDisplayById(speakerId)} cannot be assigned as Speaker because no slots are available.` });
+              return;
+            }
+            const baseList = existingSpeakerRoles.length > 0 ? existingSpeakerRoles : ((assignedRoles?.[speakerId] || []).map(normalizeRoleName));
+            const updated = Array.from(new Set([...baseList, chosenRole]));
+            await addMemberAssignedRole(speakerId, selectedMeetingId, updated);
+            setAssignedRoles(prev => ({ ...prev, [speakerId]: updated }));
+            setAvailableRoleCounts(prev => ({ ...prev, [chosenRole]: Math.max(0, (prev?.[chosenRole] || 0) - 1) }));
+            roleAdded = chosenRole;
+          }
+        }
+
+        // Check if this exact pair already exists
+        const existRes = await getAllAssignedEvaluatorsByMeeting(selectedMeetingId);
+        const exists = (existRes?.data?.data || []).some(
+          pair => 
+            Number(pair.speakerId) === Number(speakerId) && 
+            Number(pair.evaluatorId) === Number(evaluatorId)
+        );
+
+        if (exists) {
+          await Swal.fire({ icon: 'info', title: 'Pair exists', text: 'This evaluator-speaker pair already exists.' });
+          return;
+        }
+
+        // Add the new pair
+        const newPair = { 
+          id: null, 
+          speakerId: Number(speakerId), 
+          evaluatorId: Number(evaluatorId), 
+          meetingId: Number(selectedMeetingId) 
+        };
+        
+        // Get existing pairs and add the new one
+        const allPairs = (existRes?.data?.data || []).map(p => ({
+          id: p.id,
+          speakerId: Number(p.speakerId),
+          evaluatorId: Number(p.evaluatorId),
+          meetingId: Number(p.meetingId || selectedMeetingId)
+        }));
+        
+        allPairs.push(newPair);
+        
+        // Save all pairs with error handling
+        try {
+          await saveEvaluatorAssignments(allPairs);
+          await refreshPairsForMeeting(selectedMeetingId);
+          // Show success message
+          const speakerName = getMemberDisplayById(speakerId);
+          const evaluatorName = getMemberDisplayById(evaluatorId);
+          const text = roleAdded 
+            ? `${evaluatorName} assigned as evaluator for ${speakerName}. Also assigned role: ${roleAdded}.`
+            : `${evaluatorName} assigned as evaluator for ${speakerName}.`;
+          await Swal.fire({ icon: 'success', title: 'Paired', text });
+        } catch (saveErr) {
+          console.error('Failed to save evaluator-speaker pair:', saveErr);
+          await Swal.fire({ icon: 'error', title: 'Save failed', text: 'Could not save evaluator-speaker pair. Please try again.' });
+        }
         return;
       }
 
-      // Pick the first available matching role name by capacity
+      // For other role types, use the original logic
       const candidateRoleNames = (meetingSpecificRoles || [])
         .map(r => r?.roleName)
         .filter(Boolean)
@@ -905,6 +1177,7 @@ const AssignRole = () => {
               }));
               merged.push(pair);
               await saveEvaluatorAssignments(merged);
+              await refreshPairsForMeeting(selectedMeetingId);
             }
           } catch (err) {
             console.warn('assign_evaluator save check failed:', err?.message || err);
@@ -1229,8 +1502,8 @@ const AssignRole = () => {
                               {preferredRoles.map((role, i) => {
                                 const roleName = typeof role === 'object' ? (role.roleName || role.name || JSON.stringify(role)) : String(role);
                                 return (
-                                  <div key={i} className="me-1 mb-1 d-inline-flex">
-                                    <Badge bg="info" className="d-inline-flex align-items-center">
+                                  <div key={i} className="me-1 mb-1 d-inline-flex align-items-start">
+                                    <Badge bg="info" className="d-inline-flex align-items-center align-self-start" style={{ width: 'auto' }}>
                                       <span className="me-1">{i + 1}.</span>
                                       {roleName}
                                     </Badge>
@@ -1247,11 +1520,37 @@ const AssignRole = () => {
                             <div className="d-flex flex-column">
                               {currentAssignedRoles.map((role, i) => {
                                 const roleName = typeof role === 'object' ? (role.roleName || role.name || JSON.stringify(role)) : String(role);
+                                const simpleName = normalizeRoleName(roleName);
+                                const isSpeaker = isSpeakerRoleName(simpleName);
+                                const isEval = isEvaluatorRoleName(simpleName);
+                                let relationText = '';
+                                if (isSpeaker) {
+                                  const related = (pairs || [])
+                                    .filter(p => String(p.speakerId) === String(userId))
+                                    .filter(p => hasEvaluatorRoleFor(p.evaluatorId)); // show only if evaluator still has evaluator role
+                                  if (related.length > 0) {
+                                    const names = related.map(r => getMemberNameById(r.evaluatorId)).join(', ');
+                                    relationText = `Assigned evaluator ${names}`;
+                                  }
+                                } else if (isEval) {
+                                  const related = (pairs || [])
+                                    .filter(p => String(p.evaluatorId) === String(userId))
+                                    .filter(p => hasSpeakerRoleFor(p.speakerId)); // show only if speaker still has speaker role
+                                  if (related.length > 0) {
+                                    const names = related.map(r => getMemberNameById(r.speakerId)).join(', ');
+                                    relationText = `Assigned speaker ${names}`;
+                                  }
+                                }
                                 return (
-                                  <div key={i} className="me-1 mb-1 d-inline-flex">
-                                    <Badge bg="success" className="d-inline-flex align-items-center">
+                                  <div key={i} className="me-1 mb-1 d-inline-flex align-items-center flex-wrap gap-2">
+                                    <Badge bg="success" className="d-inline-flex align-items-center" style={{ width: 'auto' }}>
                                       {roleName}
                                     </Badge>
+                                    {relationText && (
+                                      <span className="small">
+                                        {relationText}
+                                      </span>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -1504,13 +1803,24 @@ const AssignRole = () => {
             </Row>
           )}
         </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowAssignRoleModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={saveRoleAssignments}>
-            Save Changes
-          </Button>
+        <Modal.Footer className="d-flex w-100 align-items-center">
+          <div className="me-auto">
+            <Form.Check
+              type="switch"
+              id="auto-unpair-switch"
+              label="Auto-unpair evaluator-speaker when removing roles"
+              checked={autoUnpairOnRemoval}
+              onChange={(e) => setAutoUnpairOnRemoval(e.target.checked)}
+            />
+          </div>
+          <div className="d-flex gap-2">
+            <Button variant="secondary" onClick={() => setShowAssignRoleModal(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={saveRoleAssignments}>
+              Save Changes
+            </Button>
+          </div>
         </Modal.Footer>
       </Modal>
 

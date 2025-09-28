@@ -31,3 +31,8 @@ export const getAllAssignedEvaluatorsBySpeakerAndMeeting = async (speakerId, mee
 export const getAllAssignedEvaluatorsByEvaluatorAndMeeting = async (evaluatorId, meetingId) => {
   return axios.get(`${BASE_URL}/getAllAssignedEvaluatorsByEvaluatorAndMeeting/${evaluatorId}/${meetingId}`);
 };
+
+// DELETE: delete a specific evaluator-speaker pair by tuple IDs
+export const deleteAssignedEvaluatorById = async (evaluatorId, meetingId, speakerId) => {
+  return axios.delete(`${BASE_URL}/deleteAssignedEvaluatorById/${evaluatorId}/${meetingId}/${speakerId}`);
+};
