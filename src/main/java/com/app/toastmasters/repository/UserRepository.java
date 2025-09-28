@@ -23,4 +23,8 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     int deleteMemberById(@Param("id") Integer userId);
 
     List<User> findByDeleteStatus(int deleteStatus);
+
+    List<User> findByUserTypeNot(String guest);
+
+    List<User> findByUserType(String guest);
 }

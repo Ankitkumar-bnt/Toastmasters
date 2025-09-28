@@ -22,6 +22,12 @@ public class AvailableMembersController {
         this.availableMembersService = availableMembersService;
     }
 
+    @PostMapping("/addAvailabilityOfGuest/{userId}/{meetingId}")
+    public ResponseEntity<ResponseMessage<AvailableMemberResponseDTO>> addAvailabilityOfGuest(
+            @PathVariable Integer userId, @PathVariable Integer meetingId) {
+        return availableMembersService.addAvailabilityOfGuest(userId, meetingId);
+    }
+
     @PostMapping("/markAvailability/{availability}/{userId}/{meetingId}")
     public ResponseEntity<ResponseMessage<AvailableMemberResponseDTO>> markAvailability(
             @PathVariable Integer availability, @PathVariable Integer userId, @PathVariable Integer meetingId) {

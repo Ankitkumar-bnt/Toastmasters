@@ -19,4 +19,6 @@ public interface AvailableMembersService {
     ResponseEntity<ResponseMessage<List<AvailableMemberResponseDTO>>> getUserAvailabilityByUserId(int userId);
 
     ResponseEntity<ResponseMessage<List<AvailableMemberResponseDTO>>> getAllMemberAvailabilityByMeetingId(int meetingId);
+
+    ResponseEntity<ResponseMessage<AvailableMemberResponseDTO>> addAvailabilityOfGuest(Integer userId, Integer meetingId);
 }

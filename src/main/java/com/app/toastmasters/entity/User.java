@@ -27,15 +27,12 @@ public class User {
     @Column(nullable = false, unique = true, length = 10)
     private String userContact;
 
-    @Column(nullable = false)
     private String userPassword;
 
-    @Column(nullable = false)
     private LocalDate joinDate = LocalDate.now();
 
     private String active = "false";
 
-    @Column(nullable = false)
     private String address;
 
     @Column(nullable = false)

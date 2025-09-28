@@ -1,5 +1,6 @@
 package com.app.toastmasters.services;
 
+import com.app.toastmasters.dto.responseDTO.GuestResponseDto;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -22,4 +23,6 @@ public interface UserService {
 	ResponseEntity<ResponseMessage<UserResponseDTO>> deleteMember(Integer userId);
 
 	ResponseEntity<ResponseMessage<UserResponseDTO>> getUserById(int userId);
+
+    ResponseEntity<ResponseMessage<List<GuestResponseDto>>> getAllGuest();
 }

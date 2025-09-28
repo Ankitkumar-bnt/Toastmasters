@@ -7,6 +7,7 @@ import com.app.toastmasters.entity.Backouts;
 import com.app.toastmasters.entity.Meeting;
 import com.app.toastmasters.entity.User;
 import com.app.toastmasters.exceptions.EmptyListException;
+import com.app.toastmasters.exceptions.EmptyObjectException;
 import com.app.toastmasters.exceptions.InvalidUserIdAndMeetingIdException;
 import com.app.toastmasters.exceptions.MemberNotFoundException;
 import com.app.toastmasters.mapper.AvailableMemberMapper;
@@ -36,6 +37,29 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
     private final MeetingRepository meetingRepository;
     private final BackoutRepository backoutRepository;
 
+    @Override
+    public ResponseEntity<ResponseMessage<AvailableMemberResponseDTO>> addAvailabilityOfGuest(Integer userId, Integer meetingId) {
+        Optional<User> user = userRepository.findById(userId);
+        Optional<Meeting> meeting = meetingRepository.findById(meetingId);
+        if(user.isEmpty() || meeting.isEmpty())
+            throw new EmptyObjectException(Constant.EMPTY_OBJECT);
+
+        User userData = user.get();
+        Meeting meetingData = meeting.get();
+
+        AvailableMembers members = new AvailableMembers();
+        members.setDate(meetingData.getMeetingDate());
+        members.setUser(userData);
+        members.setMeeting(meetingData);
+        members.setStatus(1);
+
+        AvailableMembers availableMembers = availableMembersRepository.save(members);
+
+        ResponseMessage<AvailableMemberResponseDTO> responseMessage =
+                new ResponseMessage<>(HttpStatus.OK, Constant.AVAILABILITY_MARKED_SUCCESS, mapper.toDTO(availableMembers));
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
     private void countBackouts(Integer availability, AvailableMembers availableMembers) {
         LocalDate meetingDate = availableMembers.getDate();
         LocalDate today = LocalDate.now();
@@ -64,7 +88,6 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
         }
     }
 
-
     @Override
     public ResponseEntity<ResponseMessage<AvailableMemberResponseDTO>> markAvailability(
             Integer availability, Integer userId, Integer meetingId) {
@@ -82,7 +105,6 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
 
         AvailableMembers availableMembers = availableMembersRepository.findByUserAndMeeting(userData, meetingData);
         if(availableMembers != null)
-            System.out.println("============================================================");
         countBackouts(availability, availableMembers);// helper method calling
 
         availableMembers.setStatus(availability);
@@ -152,7 +174,4 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
 
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
-
-
-
 }

@@ -1,5 +1,6 @@
 package com.app.toastmasters.controller;
 
+import com.app.toastmasters.dto.responseDTO.GuestResponseDto;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -30,15 +31,19 @@ public class AdminController {
 	}
 
 	@GetMapping("/getAllMembers")
-	public ResponseEntity<ResponseMessage<List<UserResponseDTO>>> getAllMembers()
-	{
-		return userService.getAllMember();
+	public ResponseEntity<ResponseMessage<List<UserResponseDTO>>> getAllMembers() {
+        return userService.getAllMember();
 	}
 
 	@GetMapping("/getUserById/{userId}")
 	public ResponseEntity<ResponseMessage<UserResponseDTO>> getUserById(@PathVariable int userId){
 		return userService.getUserById(userId);
 	}
+
+    @GetMapping("/getAllGuest")
+    public ResponseEntity<ResponseMessage<List<GuestResponseDto>>> getAllGuest(){
+        return userService.getAllGuest();
+    }
 
 	@PatchMapping("/updateMember/{userId}")
 	public ResponseEntity<ResponseMessage<UserResponseDTO>> updateMember(@PathVariable Integer userId, @Valid @RequestBody UserRequestDTO userRequestDTO)
