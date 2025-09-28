@@ -81,7 +81,8 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
         Meeting meetingData = meeting.get();
 
         AvailableMembers availableMembers = availableMembersRepository.findByUserAndMeeting(userData, meetingData);
-
+        if(availableMembers != null)
+            System.out.println("============================================================");
         countBackouts(availability, availableMembers);// helper method calling
 
         availableMembers.setStatus(availability);

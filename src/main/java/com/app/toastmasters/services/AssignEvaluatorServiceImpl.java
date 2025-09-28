@@ -16,6 +16,7 @@ import com.app.toastmasters.repository.MeetingRepository;
 import com.app.toastmasters.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.apache.tomcat.util.bcel.Const;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -116,6 +117,17 @@ public class AssignEvaluatorServiceImpl implements AssignEvaluatorService{
 
         ResponseMessage<List<AssignEvaluator>> responseMessage =
                 new ResponseMessage<List<AssignEvaluator>>(HttpStatus.OK,Constant.FOUND_ALL_ASSIGNED_EVALUATORS, evaluators);
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
+
+    @Override
+    public ResponseEntity<ResponseMessage<AssignEvaluator>> deleteAssignedEvaluatorById(int evaluatorId, int meetingId, int speakerId) {
+        AssignEvaluator evaluator = evaluatorRepository.findByEvaluatorIdAndMeetingIdAndSpeakerId(evaluatorId,meetingId,speakerId);
+        if(evaluator == null)
+            throw new EmptyObjectException(Constant.EMPTY_OBJECT);
+        evaluatorRepository.deleteByEvaluatorIdAndMeetingIdAndSpeakerId(evaluatorId,meetingId,speakerId);
+        ResponseMessage<AssignEvaluator> responseMessage =
+                new ResponseMessage<>(HttpStatus.OK, Constant.ROLE_DELETE_SUCCESS, evaluator);
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
 

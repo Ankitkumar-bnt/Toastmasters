@@ -42,4 +42,9 @@ public class  AssignEvaluatorController {
         return evaluatorService.getAllAssignedEvaluatorsByEvaluatorAndMeeting(evaluatorId, meetingId);
     }
 
+    @DeleteMapping("/deleteAssignedEvaluatorById/{evaluatorId}/{meetingId}/{speakerId}")
+    public ResponseEntity<ResponseMessage<AssignEvaluator>> deleteAssignedEvaluatorById(
+            @PathVariable int evaluatorId, @PathVariable int meetingId, @PathVariable int speakerId){
+        return evaluatorService.deleteAssignedEvaluatorById(evaluatorId,meetingId,speakerId);
+    }
 }

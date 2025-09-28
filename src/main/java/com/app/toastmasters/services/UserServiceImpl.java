@@ -45,10 +45,11 @@ public class UserServiceImpl implements UserService {
             User savedUser = userRepo.save(mapper.toEntity(userRequestDTO));
 
             List<Meeting> meetings = meetingRepository.findByMeetingDateGreaterThanEqual(LocalDate.now());
-            AvailableMembers availableMembers = new AvailableMembers();
-            availableMembers.setUser(savedUser);
+
             List<AvailableMembers> members = new ArrayList<>();
             for(Meeting m : meetings){
+                AvailableMembers availableMembers = new AvailableMembers();
+                availableMembers.setUser(savedUser);
                 availableMembers.setDate(m.getMeetingDate());
                 availableMembers.setMeeting(m);
                 members.add(availableMembers);
@@ -71,21 +72,6 @@ public class UserServiceImpl implements UserService {
         if(allMembers.isEmpty()) {
             throw new MemberNotFoundException(Constant.MEMBER_NOT_FOUND);
         }
-        ResponseMessage<List<UserResponseDTO>> responseMessage =
-                new ResponseMessage<List<UserResponseDTO>>(HttpStatus.OK, Constant.FOUND_ALL_MEMBERS,
-                        allMembers.stream()
-                                .map(mapper::toResponseDTO)
-                                .collect(Collectors.toList()));
-        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
-    }
-
-    public ResponseEntity<ResponseMessage<List<UserResponseDTO>>> getAllMembers() {
-        List<User> allMembers = userRepo.findByDeleteStatus(Constant.DELETE_STATUS_ACTIVE);
-
-        if(allMembers.isEmpty()) {
-            throw new MemberNotFoundException(Constant.MEMBER_NOT_FOUND);
-        }
-
         ResponseMessage<List<UserResponseDTO>> responseMessage =
                 new ResponseMessage<List<UserResponseDTO>>(HttpStatus.OK, Constant.FOUND_ALL_MEMBERS,
                         allMembers.stream()

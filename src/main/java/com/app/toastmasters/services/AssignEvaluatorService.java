@@ -16,4 +16,6 @@ public interface AssignEvaluatorService {
     ResponseEntity<ResponseMessage<List<AssignEvaluator>>> getAllAssignedEvaluatorsBySpeakerAndMeeting(int speakerId, int meetingId);
 
     ResponseEntity<ResponseMessage<List<AssignEvaluator>>> getAllAssignedEvaluatorsByEvaluatorAndMeeting(int evaluatorId, int meetingId);
+
+    ResponseEntity<ResponseMessage<AssignEvaluator>> deleteAssignedEvaluatorById(int evaluatorId, int meetingId, int speakerId);
 }
