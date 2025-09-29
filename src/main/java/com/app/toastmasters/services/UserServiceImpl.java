@@ -70,7 +70,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public ResponseEntity<ResponseMessage<List<UserResponseDTO>>> getAllMember(){
-        List<User> allMembers = userRepo.findByUserTypeNot("guest");
+        List<User> allMembers = userRepo.findAll();
 
         if(allMembers.isEmpty()) {
             throw new MemberNotFoundException(Constant.MEMBER_NOT_FOUND);
