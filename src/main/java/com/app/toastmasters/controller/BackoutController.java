@@ -26,5 +26,10 @@ public class BackoutController {
     public ResponseEntity<ResponseMessage<List<Backouts>>> getBackoutsByUser(@PathVariable int userId){
         return backoutService.getBackoutsByUser(userId);
     }
+
+    @GetMapping("/getBackoutsByMeeting/{meetingId}")
+    public ResponseEntity<ResponseMessage<List<Backouts>>> getBackoutsByMeeting(@PathVariable int meetingId){
+        return backoutService.getBackoutsByMeeting(meetingId);
+    }
 }
 

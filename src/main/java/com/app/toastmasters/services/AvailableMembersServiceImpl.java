@@ -66,27 +66,21 @@ public class AvailableMembersServiceImpl implements AvailableMembersService{
         long diffDays = ChronoUnit.DAYS.between(today, meetingDate);
 
         if (diffDays <= 7 && diffDays >= 0) {
-            Backouts backout = backoutRepository.findByUserId(availableMembers.getUser().getUserId());
+            Integer userId = availableMembers.getUser().getUserId();
+            Integer meetingId = availableMembers.getMeeting().getMeetingId();
 
             if (availableMembers.getStatus() == 1 && availability != 1) {
-                if (backout != null) {
-                    backout.setTotalBackoutCount(backout.getTotalBackoutCount() + 1);
-                    backoutRepository.save(backout);
-                } else {
-                    Backouts newBackout = new Backouts();
-                    newBackout.setUserId(availableMembers.getUser().getUserId());
-                    newBackout.setTotalBackoutCount(1);
-                    backoutRepository.save(newBackout);
-                }
+                Backouts backout = new Backouts();
+                backout.setUserId(userId);
+                backout.setMeetingId(meetingId);
+                backoutRepository.save(backout);
             }
             else if (availableMembers.getStatus() != 1 && availability == 1) {
-                if (backout != null && backout.getTotalBackoutCount() > 0) {
-                    backout.setTotalBackoutCount(backout.getTotalBackoutCount() - 1);
-                    backoutRepository.save(backout);
-                }
+                backoutRepository.deleteByUserIdAndMeetingId(userId, meetingId);
             }
         }
     }
+
 
     @Override
     public ResponseEntity<ResponseMessage<AvailableMemberResponseDTO>> markAvailability(

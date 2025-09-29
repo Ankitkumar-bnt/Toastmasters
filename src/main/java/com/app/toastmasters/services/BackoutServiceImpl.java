@@ -32,4 +32,12 @@ public class BackoutServiceImpl implements BackoutService{
                 new ResponseMessage<List<Backouts>>(HttpStatus.OK, "Found all backouts by userId", backouts);
         return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
     }
+
+    @Override
+    public ResponseEntity<ResponseMessage<List<Backouts>>> getBackoutsByMeeting(int meetingId) {
+        List<Backouts> backouts = backoutRepository.findAllByMeetingId(meetingId);
+        ResponseMessage<List<Backouts>> responseMessage =
+                new ResponseMessage<List<Backouts>>(HttpStatus.OK, "Found all backouts by userId", backouts);
+        return ResponseEntity.status(HttpStatus.OK).body(responseMessage);
+    }
 }

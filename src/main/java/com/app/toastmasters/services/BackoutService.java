@@ -10,4 +10,6 @@ public interface BackoutService {
     ResponseEntity<ResponseMessage<List<Backouts>>> getAllBackouts();
 
     ResponseEntity<ResponseMessage<List<Backouts>>> getBackoutsByUser(int userId);
+
+    ResponseEntity<ResponseMessage<List<Backouts>>> getBackoutsByMeeting(int meetingId);
 }

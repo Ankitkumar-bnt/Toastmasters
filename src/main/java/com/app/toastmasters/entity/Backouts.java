@@ -20,5 +20,5 @@ public class Backouts {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int backoutId;
     private int userId;
-    private int totalBackoutCount;
+    private int meetingId;
 }
