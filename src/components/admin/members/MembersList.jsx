@@ -14,7 +14,7 @@ const MembersList = ({
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const visibleUsers = users.filter(user => Number(user.deleteStatus) === 1);
+  const visibleUsers = users.filter(user => Number(user.deleteStatus) === 1 && user.userType !== 'guest');
   const filteredUsers = visibleUsers.filter(user =>
     user.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -4,7 +4,8 @@ import Swal from 'sweetalert2';
 import { getAllMeetings, addMeeting, getMeetingByTheme, updateMeeting } from '../../api/MeetingApi';
 import { getAllRoles } from '../../api/RoleApi';
 import { getAllMeetingRoleByMeetingId, addMeetingRoles } from '../../api/MeetingRoleApi';
-import { getAllGuest, addAvailabilityOfGuest } from '../../api/UserApi';
+import { getAllGuest } from '../../api/UserApi';
+import { addAvailabilityOfGuest } from '../../api/AvailableMembersApi';
 
 const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   const [formData, setFormData] = useState({
@@ -231,18 +232,54 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
   };
 
   const handleAddGuests = async () => {
+    setSelectedGuests({}); // Clear previous selections
     if (availableGuests.length === 0) {
       await fetchGuests();
     }
     setShowGuestModal(true);
   };
 
+  const handleGuestSelection = (userId, isSelected) => {
+    setSelectedGuests(prev => {
+      const updated = { ...prev };
+      if (isSelected) {
+        updated[userId] = true;
+      } else {
+        delete updated[userId];
+      }
+      return updated;
+    });
+  };
+
+  const handleSelectAllGuests = (isSelected) => {
+    if (isSelected) {
+      const allGuestIds = {};
+      availableGuests.forEach(guest => {
+        allGuestIds[guest.userId] = true;
+      });
+      setSelectedGuests(allGuestIds);
+    } else {
+      setSelectedGuests({});
+    }
+  };
+
   const handleGuestModalSave = () => {
+    const count = Object.keys(selectedGuests).filter(id => selectedGuests[id]).length;
+    if (count === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Guests Selected',
+        text: 'Please select at least one guest.',
+      });
+      return;
+    }
+
+    // Do NOT persist here. Persist only in handleSubmit (Add/Update Meeting).
     setShowGuestModal(false);
     Swal.fire({
-      icon: 'success',
-      title: 'Guests Added',
-      text: `${Object.keys(selectedGuests).length} guest(s) selected for this meeting.`,
+      icon: 'info',
+      title: 'Guests Selected',
+      text: `${count} guest(s) selected. They will be saved when you ${editingMeeting ? 'update' : 'create'} the meeting.`,
       timer: 2000,
       showConfirmButton: false
     });
@@ -807,12 +844,13 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
       <Modal
         show={showGuestModal}
         onHide={() => setShowGuestModal(false)}
+        size="xl"
         centered
       >
         <Modal.Header closeButton>
           <Modal.Title>Add Guests to Meeting</Modal.Title>
         </Modal.Header>
-        <Modal.Body>
+        <Modal.Body style={{ maxHeight: '60vh', overflowY: 'auto' }}>
           {guestLoading ? (
             <div className="text-center py-4">
               <div className="spinner-border" role="status">
@@ -823,15 +861,23 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
           ) : (
             <>
               {availableGuests.length > 0 ? (
-                <Table striped bordered hover>
+                <div className="table-responsive">
+                  <Table striped bordered hover>
                   <thead>
                     <tr>
-                      <th width="50">Select</th>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Contact</th>
-                      <th>Gender</th>
-                      <th>DOB</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>
+                        <Form.Check
+                          type="checkbox"
+                          checked={availableGuests.length > 0 && Object.keys(selectedGuests).length === availableGuests.length}
+                          onChange={(e) => handleSelectAllGuests(e.target.checked)}
+                          aria-label="Select all guests"
+                        />
+                      </th>
+                      <th style={{ minWidth: '150px' }}>Name</th>
+                      <th style={{ minWidth: '200px' }}>Email</th>
+                      <th style={{ minWidth: '120px' }}>Contact</th>
+                      <th style={{ width: '100px' }}>Gender</th>
+                      <th style={{ width: '120px' }}>DOB</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -842,6 +888,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
                             type="checkbox"
                             checked={!!selectedGuests[g.userId]}
                             onChange={(e) => handleGuestSelection(g.userId, e.target.checked)}
+                            aria-label={`Select ${g.userName}`}
                           />
                         </td>
                         <td>{g.userName}</td>
@@ -853,6 +900,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
                     ))}
                   </tbody>
                 </Table>
+                </div>
               ) : (
                 <div className="text-center py-4">
                   <p className="text-muted">No guests found.</p>
@@ -876,7 +924,7 @@ const MeetingForm = ({ show, onHide, onSubmit, editingMeeting, title }) => {
               </Button>
               <Button
                 variant="primary"
-                onClick={handleGuestModalSave}
+                onClick={() => handleGuestModalSave()}
                 disabled={Object.keys(selectedGuests).length === 0}
               >
                 Save Guests

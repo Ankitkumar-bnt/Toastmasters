@@ -41,9 +41,17 @@ export const getAllMemberAvailabilityByMeetingId = async (meetingId) => {
   return axios.get(`${API_BASE_URL}/getAllMemberAvailabilityByMeetingId/${meetingId}`);
 };
 
+// Add guest availability record for a specific user and meeting
+export const addAvailabilityOfGuest = async (userId, meetingId) => {
+  const u = Number(userId);
+  const m = Number(meetingId);
+  return axios.post(`${API_BASE_URL}/addAvailabilityOfGuest/${u}/${m}`);
+};
+
 export default {
 	markAvailability,
 	getAllMemberAvailability,
 	getAvailabilityById,
 	getAllMemberAvailabilityByMeetingId,
+	addAvailabilityOfGuest,
 };
