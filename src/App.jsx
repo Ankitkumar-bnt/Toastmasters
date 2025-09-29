@@ -15,12 +15,12 @@ import MeetingsList from './components/meetings/MeetingsList';
 import MeetingDetails from './components/meetings/MeetingDetails';
 import DashboardStats from './components/admin/dashboard/DashboardStats';
 import { Modal, Table } from 'react-bootstrap';
-import { getAllBackouts } from './api/BackoutApi';
 import AssignRole from './components/assign-role/AssignRole';
 import AgendaView from './components/agenda/AgendaView';
 import UpdateAgenda from './components/agenda/updateAgenda';
 import GemOfMonthModal from './components/admin/GemOfMonthModal';
 import MeetingWinner from './components/admin/MeetingWinner';
+import BackoutsModal from './components/admin/BackoutsModal';
 import { Users, UserPlus, Calendar, FileText } from 'lucide-react';
 import './App.css';
 
@@ -43,8 +43,6 @@ function App({ onLogout }) {
   const [selectedAgendaMeetingId, setSelectedAgendaMeetingId] = useState(null);
   const [showGemOfMonthModal, setShowGemOfMonthModal] = useState(false);
   const [showBackoutsModal, setShowBackoutsModal] = useState(false);
-  const [backouts, setBackouts] = useState([]);
-  const [memberNameById, setMemberNameById] = useState({});
   const [guests, setGuests] = useState([]);
   const [guestsLoading, setGuestsLoading] = useState(false);
 
@@ -68,27 +66,7 @@ function App({ onLogout }) {
     loadMeetings();
   }, []);
 
-  useEffect(() => {
-    if (showBackoutsModal) {
-      (async () => {
-        try {
-          const res = await getAllBackouts();
-          const list = res?.data?.data || [];
-          const idToName = (users || []).reduce((m, u) => {
-            const id = u.userId ?? u.id;
-            if (id != null) m[id] = u.userName || u.name || `User #${id}`;
-            return m;
-          }, {});
-          setMemberNameById(idToName);
-          const sorted = [...list].sort((a, b) => (b.totalBackoutCount || 0) - (a.totalBackoutCount || 0));
-          setBackouts(sorted);
-        } catch (e) {
-          console.error('Failed to load backouts', e);
-          setBackouts([]);
-        }
-      })();
-    }
-  }, [showBackoutsModal, users]);
+  // BackoutsModal handles its own data fetching
 
   const loadUsers = async () => {
     try {
@@ -601,38 +579,12 @@ function App({ onLogout }) {
           onHide={() => setShowGemOfMonthModal(false)}
         />
 
-        <Modal show={showBackoutsModal} onHide={() => setShowBackoutsModal(false)} centered>
-          <Modal.Header closeButton>
-            <Modal.Title>Track Backouts</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            {backouts.length === 0 ? (
-              <div className="text-center text-muted">No backouts found.</div>
-            ) : (
-              <div className="table-responsive">
-                <Table striped bordered hover size="sm" className="mb-0">
-                  <thead>
-                    <tr>
-                      <th>Member</th>
-                      <th className="text-end">Backout Count</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {backouts.map((b, idx) => (
-                      <tr key={idx}>
-                        <td>{memberNameById[b.userId] || b.userName || b.memberName || `User #${b.userId}`}</td>
-                        <td className="text-end">{b.totalBackoutCount ?? 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-            )}
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowBackoutsModal(false)}>Close</Button>
-          </Modal.Footer>
-        </Modal>
+        <BackoutsModal
+          show={showBackoutsModal}
+          onHide={() => setShowBackoutsModal(false)}
+          users={users}
+          meetings={meetings}
+        />
 
         <Modal show={showGuestsModal} onHide={() => setShowGuestsModal(false)} centered size="lg">
           <Modal.Header closeButton>

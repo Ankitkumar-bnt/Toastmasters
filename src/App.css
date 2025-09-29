@@ -4,3 +4,14 @@
 .hover-card:hover {
   transform: translateY(-5px);
 }
+
+/* Backouts Modal: larger size */
+.modal-dialog.backouts-modal-xl {
+  max-width: 700px;
+  width: 70vw;
+}
+
+.backouts-modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}

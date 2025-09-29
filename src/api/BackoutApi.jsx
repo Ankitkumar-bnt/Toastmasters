@@ -23,9 +23,15 @@ export const getBackoutsByUser = async (userId) => {
   return await withFallback((base) => axios.get(`${base}/getBackoutsByUser/${userId}`));
 };
 
+export const getBackoutsByMeeting = async (meetingId) => {
+  // Note: ensure your backend mapping is /getBackoutsByMeeting/{meetingId}
+  return await withFallback((base) => axios.get(`${base}/getBackoutsByMeeting/${meetingId}`));
+};
+
 export default {
   getAllBackouts,
   getBackoutsByUser,
+  getBackoutsByMeeting,
 };
 
 

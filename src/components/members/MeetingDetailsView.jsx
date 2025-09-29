@@ -4,6 +4,7 @@ import { ArrowLeft, Calendar, Clock, MapPin, Tag, UserCheck } from 'lucide-react
 import { markAvailability, getAvailabilityById } from '../../api/AvailableMembersApi';
 import { getMemberPreferredRoles } from '../../api/PreferredRoleApi';
 import RoleSelectionModal from './RoleSelectionModal';
+import Swal from 'sweetalert2';
 
 const MeetingDetailsView = ({ meeting, onBack, onChooseRole }) => {
   if (!meeting) return null;
@@ -116,6 +117,62 @@ const MeetingDetailsView = ({ meeting, onBack, onChooseRole }) => {
       setFeedback({ type: 'error', message: 'Missing user or meeting information.' });
       return;
     }
+
+    // If selecting the same state, do nothing
+    if (value === selectedAvailability) return;
+
+    // Determine if a confirmation is needed
+    const current = selectedAvailability; // '1' | '0' | '2' | null
+    const target = value; // '1' | '0' | '2'
+
+    const daysUntilMeeting = (() => {
+      try {
+        const ds = meeting?.meetingDate; // expected YYYY-MM-DD
+        if (!ds) return null;
+        const [y, m, d] = ds.split('-').map(Number);
+        const dt = new Date(y, (m || 1) - 1, d || 1);
+        if (Number.isNaN(dt.getTime())) return null;
+        const today = new Date();
+        dt.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+        return Math.floor((dt - today) / (1000 * 60 * 60 * 24));
+      } catch {
+        return null;
+      }
+    })();
+
+    let proceed = true;
+    const reducingAvailability = (current === '1' && (target === '0' || target === '2')) || (current !== '0' && target === '0');
+
+    if (reducingAvailability) {
+      if (target === '0' && daysUntilMeeting !== null && daysUntilMeeting >= 0 && daysUntilMeeting <= 7) {
+        // Within next 7 days and marking Not Available => Backout warning
+        const res = await Swal.fire({
+          title: 'Are you want to backout?',
+          text: 'This meeting is within the next 7 days. Confirm your unavailability.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Yes',
+          cancelButtonText: 'No'
+        });
+        proceed = res.isConfirmed;
+      } else {
+        // Simple confirmation for Not Available (outside 7 days) or Tentative
+        const msg = target === '0' ? 'Mark yourself as Not Available?' : 'Mark yourself as Tentative?';
+        const res = await Swal.fire({
+          title: 'Are you sure?',
+          text: msg,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'Yes',
+          cancelButtonText: 'No'
+        });
+        proceed = res.isConfirmed;
+      }
+    }
+
+    if (!proceed) return; // Keep previous selection
+
     setSelectedAvailability(value);
     setSubmitting(true);
     setFeedback(null);
