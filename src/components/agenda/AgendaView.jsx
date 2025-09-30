@@ -190,11 +190,28 @@ const AgendaView = ({ onEditAgenda, preselectedMeetingId, isMemberView = false }
       setMeetingsLoading(true);
       const response = await getAllUpcomingMeetings();
       const meetings = response.data.data || [];
+      
+      // Filter to only show meetings from current day onwards
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Set to start of today
+      
+      const currentAndFutureMeetings = meetings.filter(meeting => {
+        if (!meeting.meetingDate) return false;
+        const meetingDate = new Date(meeting.meetingDate);
+        meetingDate.setHours(0, 0, 0, 0); // Set to start of meeting day
+        return meetingDate >= today; // Include today and future dates
+      });
+      
+      // Sort meetings by date (earliest first)
+      currentAndFutureMeetings.sort((a, b) => {
+        const dateA = new Date(a.meetingDate);
+        const dateB = new Date(b.meetingDate);
+        return dateA.getTime() - dateB.getTime();
+      });
       // Preserve the actual isPublished value from database, check both field names
-      const meetingsWithPublishStatus = meetings.map(meeting => ({
+      const meetingsWithPublishStatus = currentAndFutureMeetings.map(meeting => ({
         ...meeting,
-        isPublished: meeting.isPublished === true || meeting.isPublished === 'true' || meeting.isPublished === 1 ||
-                    meeting.published === true || meeting.published === 'true' || meeting.published === 1
+        isPublished: Boolean(meeting.isPublished) || Boolean(meeting.published)
       }));
       console.log('Loaded meetings with publish status:', meetingsWithPublishStatus);
       setMeetings(meetingsWithPublishStatus);

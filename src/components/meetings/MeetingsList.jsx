@@ -155,6 +155,19 @@ const MeetingsList = ({ meetings, loading, onEdit, onDelete, onAdd }) => {
     );
   };
 
+  const isPastMeeting = (meeting) => {
+    const { meetingDate, startTime, endTime } = meeting;
+    if (!meetingDate || !startTime || !endTime) return false;
+
+    const [year, month, day] = meetingDate.split('-').map(Number);
+    const [endHourStr, endMinuteStr] = String(endTime).split(':');
+
+    const end = new Date(year, (month || 1) - 1, day, Number(endHourStr), Number(endMinuteStr || 0));
+    const now = new Date();
+
+    return now > end;
+  };
+
   if (loading) {
     return (
       <Card className="shadow-sm">
@@ -383,7 +396,8 @@ const MeetingsList = ({ meetings, loading, onEdit, onDelete, onAdd }) => {
                       size="sm"
                       className="me-2"
                       onClick={() => onEdit(meeting)}
-                      title="Edit Meeting"
+                      title={isPastMeeting(meeting) ? "Cannot edit past meetings" : "Edit Meeting"}
+                      disabled={isPastMeeting(meeting)}
                     >
                       <Edit size={16} />
                     </Button>
