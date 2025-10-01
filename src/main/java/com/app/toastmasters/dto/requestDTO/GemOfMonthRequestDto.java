@@ -1,6 +1,5 @@
-package com.app.toastmasters.dto.responseDTO;
+package com.app.toastmasters.dto.requestDTO;
 
-import com.app.toastmasters.entity.User;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -8,13 +7,11 @@ import lombok.Setter;
 
 import java.time.LocalDate;
 
-@Getter
 @Setter
+@Getter
 @AllArgsConstructor
 @NoArgsConstructor
-public class GemOfMonthDTO {
-
-    private int gemId;
+public class GemOfMonthRequestDto {
     private LocalDate month;
     private int userId;
     private String userName;
