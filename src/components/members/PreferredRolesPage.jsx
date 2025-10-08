@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Spinner, Alert, Row, Col } from 'react-bootstrap';
+import { Alert, Row, Col } from 'react-bootstrap';
 import { getAllMeetings } from '../../api/MeetingApi';
 import { getAllMembers } from '../../api/UserApi';
 import MeetingCard from './MeetingCard';
@@ -10,6 +10,8 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
   const [meetings, setMeetings] = useState([]);
   const [members, setMembers] = useState([]);
   const [userId, setUserId] = useState(null);
+  const CACHE_KEY = 'preferred_roles_page_cache_v1';
+  const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
   // Helper function to safely extract role names
   const getRoleName = (role) => {
@@ -19,6 +21,19 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
   };
 
   useEffect(() => {
+    // Serve cached meetings/members instantly if present
+    try {
+      const cachedRaw = localStorage.getItem(CACHE_KEY);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw);
+        if (cached && (Date.now() - (cached.ts || 0)) < CACHE_TTL) {
+          setMembers(cached.members || []);
+          setMeetings(cached.meetings || []);
+          setLoading(false);
+        }
+      }
+    } catch {}
+
     const fetchInitialData = async () => {
       try {
         setLoading(true);
@@ -40,6 +55,14 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
         setMembers(membersList);
         const filteredMeetings = filterMeetings(meetingsList);
         setMeetings(filteredMeetings);
+        // Update cache after network load
+        try {
+          localStorage.setItem(CACHE_KEY, JSON.stringify({
+            meetings: filteredMeetings,
+            members: membersList,
+            ts: Date.now(),
+          }));
+        } catch {}
       } catch (err) {
         setError(err.message || 'Failed to load initial data.');
       } finally {
@@ -71,13 +94,7 @@ const PreferredRolesPage = ({ onMeetingClick }) => {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '200px' }}>
-        <Spinner animation="border" variant="primary" />
-      </div>
-    );
-  }
+  // Always render without a blocking spinner; data hydrates from cache/network
 
   if (error) {
     return (

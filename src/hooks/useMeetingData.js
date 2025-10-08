@@ -5,6 +5,11 @@ import { getAllMeetingRoleCombineByMeeting } from '../api/MeetingRoleApi';
 import { getAllMemberAvailabilityByMeetingId } from '../api/AvailableMembersApi';
 import { getAllAssignedEvaluatorsByMeeting } from '../api/AssignEvaluatorApi';
 
+// Simple in-memory cache for meeting data per (meetingId,userId)
+const MEETING_DATA_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const meetingDataCache = new Map(); // key: `${meetingId}::${userId}` -> { timestamp, value }
+const makeKey = (meetingId, userId) => `${meetingId}::${userId}`;
+
 const useMeetingData = (meetingId, userId, members) => {
   const [meetingData, setMeetingData] = useState({
     loading: true,
@@ -21,6 +26,13 @@ const useMeetingData = (meetingId, userId, members) => {
     if (!meetingId || !userId) {
       setMeetingData(prev => ({ ...prev, loading: false }));
       return;
+    }
+
+    // Serve cached data immediately if available and fresh (stale-while-revalidate)
+    const key = makeKey(meetingId, userId);
+    const cached = meetingDataCache.get(key);
+    if (cached && (Date.now() - cached.timestamp) < MEETING_DATA_CACHE_TTL) {
+      setMeetingData({ loading: false, ...cached.value });
     }
 
     const fetchMeetingDetails = async () => {
@@ -90,8 +102,7 @@ const useMeetingData = (meetingId, userId, members) => {
             return name ? `${item.speakerId} - ${name}` : `${item.speakerId}`;
           });
 
-        setMeetingData({
-          loading: false,
+        const payload = {
           error: null,
           preferredRoles,
           assignedRoles,
@@ -99,7 +110,9 @@ const useMeetingData = (meetingId, userId, members) => {
           availabilityStatus,
           assignedEvaluators,
           assignedSpeakers,
-        });
+        };
+        setMeetingData({ loading: false, ...payload });
+        meetingDataCache.set(key, { timestamp: Date.now(), value: payload });
 
       } catch (err) {
         setMeetingData({

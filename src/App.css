@@ -15,3 +15,27 @@
   max-height: 70vh;
   overflow-y: auto;
 }
+
+/* Generic modal width helpers */
+.modal-dialog.modal-40w {
+  width: 40vw;
+  max-width: 40vw;
+}
+
+/* 70% width modal helper */
+.modal-dialog.modal-70w {
+  width: 70vw !important;
+  max-width: 70vw !important;
+}
+
+/* Optionally ensure reasonable width on very small screens */
+@media (max-width: 576px) {
+  .modal-dialog.modal-40w {
+    width: 95vw;
+    max-width: 95vw;
+  }
+  .modal-dialog.modal-70w {
+    width: 95vw !important;
+    max-width: 95vw !important;
+  }
+}

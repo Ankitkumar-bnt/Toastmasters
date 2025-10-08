@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Button, Card, Row, Col, Badge, Spinner, Alert, ListGroup } from 'react-bootstrap';
 import { Award, Calendar, CheckCircle2 } from 'lucide-react';
 import { getAllGemOfMonth, gemsOfTheLastMonth, selectGemOfMonth } from '../../api/MeetingAwardsApi';
+import { getAllMeetings } from '../../api/MeetingApi';
+import { getMemberAssignedRole } from '../../api/AssignedRoleApi';
 
 const GemOfMonthModal = ({ show, onHide }) => {
   const [gemData, setGemData] = useState([]);
@@ -13,6 +15,10 @@ const GemOfMonthModal = ({ show, onHide }) => {
   const [candidatesError, setCandidatesError] = useState(null);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState(null);
+  const [userRolesByMeeting, setUserRolesByMeeting] = useState({}); // { [userId]: [{ meetingId, meetingDate, meetingTheme, roles: [] }] }
+  const [showOtherMonths, setShowOtherMonths] = useState(false);
 
   useEffect(() => {
     if (show) {
@@ -128,6 +134,86 @@ const GemOfMonthModal = ({ show, onHide }) => {
     ))
     .sort(sortByMonthDesc);
 
+  // Load meeting-wise roles for last month's gem winners
+  const loadUserRolesForLastMonth = async () => {
+    try {
+      setDetailsLoading(true);
+      setDetailsError(null);
+
+      // 1) Fetch all meetings and filter the ones that belong to the last calendar month
+      const mtgResp = await getAllMeetings();
+      const allMeetings = mtgResp?.data?.data || [];
+
+      const start = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth(), 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(lastMonthDate.getFullYear(), lastMonthDate.getMonth() + 1, 0);
+      end.setHours(23, 59, 59, 999);
+
+      const lastMonthMeetings = allMeetings
+        .filter(m => {
+          if (!m?.meetingDate) return false;
+          const d = new Date(m.meetingDate);
+          d.setHours(0, 0, 0, 0);
+          return d >= start && d <= end;
+        })
+        .sort((a, b) => new Date(a.meetingDate) - new Date(b.meetingDate));
+
+      // 2) For each last-month gem, gather their roles per meeting (meeting-wise)
+      const resultMap = {};
+      for (const gem of lastMonthGems) {
+        const uid = gem?.userId || gem?.user?.userId;
+        if (!uid) continue;
+
+        const entries = await Promise.all(
+          lastMonthMeetings.map(async (mtg) => {
+            try {
+              const ar = await getMemberAssignedRole(uid, mtg.meetingId);
+              const raw = ar?.data || [];
+              const roleNames = Array.isArray(raw)
+                ? raw.map(r => r?.roleName || r?.name || r).filter(Boolean)
+                : [];
+              return {
+                meetingId: mtg.meetingId,
+                meetingDate: mtg.meetingDate,
+                meetingTheme: mtg.meetingTheme || '',
+                roles: roleNames
+              };
+            } catch (_e) {
+              return {
+                meetingId: mtg.meetingId,
+                meetingDate: mtg.meetingDate,
+                meetingTheme: mtg.meetingTheme || '',
+                roles: []
+              };
+            }
+          })
+        );
+
+        // Keep only meetings where the user actually had at least one role
+        const filteredEntries = (entries || []).filter(e => Array.isArray(e.roles) && e.roles.length > 0);
+        resultMap[String(uid)] = filteredEntries;
+      }
+
+      setUserRolesByMeeting(resultMap);
+    } catch (e) {
+      console.warn('Failed to load last-month roles per user:', e?.message || e);
+      setDetailsError('Failed to load role details');
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  // Trigger details load whenever modal opens or gem data changes
+  useEffect(() => {
+    if (!show) return;
+    if (lastMonthGems.length === 0) {
+      setUserRolesByMeeting({});
+      return;
+    }
+    loadUserRolesForLastMonth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, gemData]);
+
   const openSelectGem = async () => {
     try {
       setCandidatesError(null);
@@ -171,8 +257,8 @@ const GemOfMonthModal = ({ show, onHide }) => {
     }
   };
 
-  const renderGemCard = (gem, index) => (
-    <Col md={6} lg={4} key={index} className="mb-3">
+  const renderGemCard = (gem, index, withDetails = false) => (
+    <Col key={index} className="mb-3" {...(withDetails ? { xs: 12, md: 6 } : { md: 6, lg: 4 })}>
       <Card className="h-100 shadow-sm border-0">
         <Card.Body className="text-center">
           <Award size={40} className="text-warning mb-3" />
@@ -186,13 +272,50 @@ const GemOfMonthModal = ({ show, onHide }) => {
               {gem.dayCount} days active
             </small>
           </div>
+          {withDetails && (
+            <div className="mt-3 text-start">
+              <h6 className="small fw-bold mb-2">Last month roles (by meeting)</h6>
+              {detailsLoading ? (
+                <div className="text-center"><Spinner animation="border" size="sm" /></div>
+              ) : (
+                <>
+                  {detailsError && <Alert variant="warning" className="py-1 mb-2">{detailsError}</Alert>}
+                  {(() => {
+                    const uid = gem?.userId || gem?.user?.userId;
+                    const entries = userRolesByMeeting[String(uid)] || [];
+                    if (!entries || entries.length === 0) {
+                      return <div className="text-muted small">No meetings last month or no roles assigned.</div>;
+                    }
+                    return (
+                      <ListGroup variant="flush">
+                        {entries.map((e, i) => (
+                          <ListGroup.Item key={`${uid}-${e.meetingId}-${i}`} className="px-0 py-1">
+                            <div className="d-flex justify-content-between">
+                              <div className="small">
+                                <span className="fw-semibold">{e.meetingDate}</span> {e.meetingTheme ? `- ${e.meetingTheme}` : ''}
+                              </div>
+                              <div className="small">
+                                {Array.isArray(e.roles) && e.roles.length > 0
+                                  ? e.roles.join(', ')
+                                  : null}
+                              </div>
+                            </div>
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
+          )}
         </Card.Body>
       </Card>
     </Col>
   );
 
   return (
-    <Modal show={show} onHide={onHide} size="lg" centered>
+    <Modal show={show} onHide={onHide} size="xl" centered dialogClassName="modal-70w">
       <Modal.Header closeButton className="bg-primary text-white">
         <Modal.Title className="w-100 text-center">
           <Award size={24} className="me-2" />
@@ -225,7 +348,7 @@ const GemOfMonthModal = ({ show, onHide }) => {
               </div>
               {lastMonthGems.length > 0 ? (
                 <Row className="justify-content-center">
-                  {lastMonthGems.map((gem, index) => renderGemCard(gem, `last-${index}`))}
+                  {lastMonthGems.map((gem, index) => renderGemCard(gem, `last-${index}`, true))}
                 </Row>
               ) : (
                 <Card className="border-0 bg-light">
@@ -239,23 +362,34 @@ const GemOfMonthModal = ({ show, onHide }) => {
 
             <hr className="my-4" />
 
-            {/* Bottom Section: Other Past Months */}
+            {/* Bottom Section: Other Past Months (collapsed by default) */}
             <div className="text-center">
-              <div className="d-flex flex-column align-items-center mb-4">
+              <div className="d-flex flex-column align-items-center mb-2">
                 <Calendar size={24} className="text-info mb-2" />
                 <h4 className="mb-0 text-secondary">Other Past Months</h4>
+                <div className="mt-2">
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => setShowOtherMonths(v => !v)}
+                  >
+                    {showOtherMonths ? 'Hide' : 'Show'}
+                  </Button>
+                </div>
               </div>
-              {otherPastMonthsGems.length > 0 ? (
-                <Row className="justify-content-center">
-                  {otherPastMonthsGems.map((gem, index) => renderGemCard(gem, `other-${index}`))}
-                </Row>
-              ) : (
-                <Card className="border-0 bg-light">
-                  <Card.Body className="text-center py-4">
-                    <Calendar size={48} className="text-muted mb-3" />
-                    <h6 className="text-muted">No other past month gems to display</h6>
-                  </Card.Body>
-                </Card>
+              {showOtherMonths && (
+                otherPastMonthsGems.length > 0 ? (
+                  <Row className="justify-content-center">
+                    {otherPastMonthsGems.map((gem, index) => renderGemCard(gem, `other-${index}`))}
+                  </Row>
+                ) : (
+                  <Card className="border-0 bg-light">
+                    <Card.Body className="text-center py-4">
+                      <Calendar size={48} className="text-muted mb-3" />
+                      <h6 className="text-muted">No other past month gems to display</h6>
+                    </Card.Body>
+                  </Card>
+                )
               )}
             </div>
           </>

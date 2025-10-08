@@ -58,7 +58,6 @@ const AssignRole = () => {
   const [pairs, setPairs] = useState([]); // [{ id?, speakerId, speakerName, evaluatorId, evaluatorName, meetingId }]
   const [loadingEvaluatorData, setLoadingEvaluatorData] = useState(false);
   const [initialPairsSnapshot, setInitialPairsSnapshot] = useState(''); // JSON snapshot to detect unsaved changes
-  const [autoUnpairOnRemoval, setAutoUnpairOnRemoval] = useState(true);
 
   const openAssignEvaluatorModal = async () => {
     if (!selectedMeetingId) return;
@@ -800,74 +799,6 @@ const AssignRole = () => {
       
       setAvailableRoleCounts(roleCounts);
       
-      // ==== Auto pair/unpair evaluator-speaker relationships on Save ====
-      const hadSpeakerBefore = (previousRoles || []).some(r => isSpeakerRoleName(normalizeRoleName(r)));
-      const hadEvaluatorBefore = (previousRoles || []).some(r => isEvaluatorRoleName(normalizeRoleName(r)));
-      const hasSpeakerNow = (selectedMemberRoles || []).some(r => isSpeakerRoleName(normalizeRoleName(r)));
-      const hasEvaluatorNow = (selectedMemberRoles || []).some(r => isEvaluatorRoleName(normalizeRoleName(r)));
-
-      try {
-        // Fetch existing meeting pairs
-        const existRes = await getAllAssignedEvaluatorsByMeeting(selectedMeetingId);
-        const exist = existRes?.data?.data || [];
-
-        // Normalize helper
-        const normalizePairs = (arr) => (arr || []).map(a => ({
-          id: a.id || null,
-          speakerId: Number(a.speakerId),
-          evaluatorId: Number(a.evaluatorId),
-          meetingId: Number(a.meetingId || selectedMeetingId)
-        }));
-
-        let finalPairs = normalizePairs(exist);
-        let toDelete = [];
-
-        // Auto-unpair if the user no longer has the respective role (respect toggle)
-        if (autoUnpairOnRemoval && !hasSpeakerNow) {
-          const removedAsSpeaker = finalPairs.filter(p => Number(p.speakerId) === Number(userId));
-          if (removedAsSpeaker.length > 0) {
-            toDelete.push(...removedAsSpeaker);
-            finalPairs = finalPairs.filter(p => Number(p.speakerId) !== Number(userId));
-          }
-        }
-        if (autoUnpairOnRemoval && !hasEvaluatorNow) {
-          const removedAsEvaluator = finalPairs.filter(p => Number(p.evaluatorId) === Number(userId));
-          if (removedAsEvaluator.length > 0) {
-            toDelete.push(...removedAsEvaluator);
-            finalPairs = finalPairs.filter(p => Number(p.evaluatorId) !== Number(userId));
-          }
-        }
-
-        // Note: Auto-creation of evaluator-speaker pairs is disabled. Admin must assign pairs explicitly.
-
-        if (toDelete.length > 0) {
-          // Optimistically update UI first
-          try {
-            const displayMapped = finalPairs.map(a => ({
-              id: a.id || null,
-              meetingId: Number(a.meetingId || selectedMeetingId),
-              speakerId: Number(a.speakerId),
-              evaluatorId: Number(a.evaluatorId),
-              speakerName: getMemberDisplayById(a.speakerId),
-              evaluatorName: getMemberDisplayById(a.evaluatorId)
-            }));
-            setPairs(displayMapped);
-          } catch {}
-
-          // Call targeted delete API for each removed pair
-          try {
-            await Promise.all(toDelete.map(p => (
-              deleteEvaluatorAssignment(Number(p.evaluatorId), Number(selectedMeetingId), Number(p.speakerId))
-            )));
-          } catch (delPairErr) {
-            console.warn('Failed to delete some evaluator assignments:', delPairErr?.message || delPairErr);
-          }
-
-          await refreshPairsForMeeting(selectedMeetingId);
-        }
-      } catch (pairErr) {
-        console.warn('Auto pair/unpair on save skipped:', pairErr?.message || pairErr);
-      }
 
       setSuccess('Roles updated successfully');
       setTimeout(() => setSuccess(''), 3000);
@@ -1804,15 +1735,6 @@ const AssignRole = () => {
           )}
         </Modal.Body>
         <Modal.Footer className="d-flex w-100 align-items-center">
-          <div className="me-auto">
-            <Form.Check
-              type="switch"
-              id="auto-unpair-switch"
-              label="Auto-unpair evaluator-speaker when removing roles"
-              checked={autoUnpairOnRemoval}
-              onChange={(e) => setAutoUnpairOnRemoval(e.target.checked)}
-            />
-          </div>
           <div className="d-flex gap-2">
             <Button variant="secondary" onClick={() => setShowAssignRoleModal(false)}>
               Cancel

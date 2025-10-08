@@ -49,17 +49,7 @@ const MeetingCard = ({ meeting, userId, members, onMeetingClick }) => {
     }
   };
 
-  if (loading) {
-    return (
-      <Col>
-        <Card className="h-100 shadow-sm">
-          <Card.Body className="d-flex justify-content-center align-items-center" style={{ minHeight: '260px' }}>
-            <Spinner animation="border" variant="primary" />
-          </Card.Body>
-        </Card>
-      </Col>
-    );
-  }
+  // Do not block render on loading; show lightweight placeholders in sections instead
 
   if (error) {
     return (
@@ -95,10 +85,12 @@ const MeetingCard = ({ meeting, userId, members, onMeetingClick }) => {
             <div className="mb-3">
                 <div className="d-flex justify-content-between align-items-center mb-2">
                     <span className="fw-semibold">Available Roles</span>
-                    <Badge bg="light" text="dark" className="small">{availableRoles.length} roles</Badge>
+                    {!loading && <Badge bg="light" text="dark" className="small">{availableRoles.length} roles</Badge>}
                 </div>
                 <div className="d-flex flex-wrap gap-1">
-                    {availableRoles.length > 0 ? (
+                    {loading ? (
+                        <span className="text-muted small">Loading roles...</span>
+                    ) : availableRoles.length > 0 ? (
                         availableRoles.map((role, idx) => {
                             const isPreferred = preferredRoles.some(r => getRoleName(r) === role.roleName);
                             const isUpdating = updatingPreferences[`${meeting.meetingId}-${role.roleName}`];
@@ -125,7 +117,9 @@ const MeetingCard = ({ meeting, userId, members, onMeetingClick }) => {
             <div className="mb-3">
                 <div className="fw-semibold mb-2">Your Preferred Roles</div>
                 <div className="d-flex flex-wrap gap-1">
-                    {preferredRoles.length > 0 ? (
+                    {loading ? (
+                        <span className="text-muted small">Loading...</span>
+                    ) : preferredRoles.length > 0 ? (
                         preferredRoles.map((role, idx) => (
                             <Badge key={`pref-${idx}`} bg="info" className="me-1 mb-1">{getRoleName(role)}</Badge>
                         ))
@@ -136,7 +130,9 @@ const MeetingCard = ({ meeting, userId, members, onMeetingClick }) => {
             <div className="mb-2">
                 <div className="fw-semibold mb-2">Your Assigned Roles</div>
                 <div className="d-flex flex-wrap gap-1">
-                    {assignedRoles.length > 0 ? (
+                    {loading ? (
+                        <span className="text-muted small">Loading...</span>
+                    ) : assignedRoles.length > 0 ? (
                         assignedRoles.map((role, idx) => (
                             <Badge key={`assigned-${idx}`} bg="success" className="me-1 mb-1">{getRoleName(role)}</Badge>
                         ))
@@ -144,7 +140,7 @@ const MeetingCard = ({ meeting, userId, members, onMeetingClick }) => {
                 </div>
             </div>
 
-            {assignedEvaluators.length > 0 && (
+            {!loading && assignedEvaluators.length > 0 && (
                 <div>
                     <div className="fw-semibold mb-2">Assigned Evaluators</div>
                     <div className="d-flex flex-wrap gap-1">
@@ -153,7 +149,7 @@ const MeetingCard = ({ meeting, userId, members, onMeetingClick }) => {
                 </div>
             )}
 
-            {assignedSpeakers.length > 0 && (
+            {!loading && assignedSpeakers.length > 0 && (
                 <div className="mt-2">
                     <div className="fw-semibold mb-2">Assigned Speakers</div>
                     <div className="d-flex flex-wrap gap-1">
